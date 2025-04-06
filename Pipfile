@@ -7,11 +7,13 @@ name = "pypi"
 fastapi = "*"
 uvicorn = "*"
 python-multipart = "*"
-numpy = "*"
 pydantic = "*"
 pydantic-settings = "*"
 pillow = "*"
 tflite = "*"
+exceptiongroup = "*"
+numpy = "*"
+tflite-runtime = "*"
 
 [dev-packages]
 
