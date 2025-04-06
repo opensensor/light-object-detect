@@ -2,7 +2,7 @@ import os
 import numpy as np
 from typing import List, Dict, Any, Optional
 from PIL import Image
-import tflite
+import tflite_runtime.interpreter as tflite
 
 from backends.base import DetectionBackend
 from models.detection import DetectionResult, BoundingBox
