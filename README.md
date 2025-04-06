@@ -104,4 +104,4 @@ light-object-detect/
 
 ## License
 
-[Include your license information here]
+Licensed under GPLv3

@@ -11,7 +11,7 @@ import argparse
 from pathlib import Path
 
 
-def test_detect_endpoint(image_path, url="http://localhost:9001/api/v1/detect", backend="tflite", confidence=0.5):
+def test_detect_endpoint(image_path, url="http://localhost:9001/api/v1/detect", backend="tflite", confidence=0.5, return_image=False):
     """Test the detect endpoint with an image."""
     print(f"Testing detect endpoint with image: {image_path}")
     
@@ -27,7 +27,8 @@ def test_detect_endpoint(image_path, url="http://localhost:9001/api/v1/detect", 
     
     params = {
         'backend': backend,
-        'confidence_threshold': confidence
+        'confidence_threshold': confidence,
+        'return_image': return_image
     }
     
     # Send the request
@@ -55,6 +56,23 @@ def test_detect_endpoint(image_path, url="http://localhost:9001/api/v1/detect", 
                       f"y_min={detection['bounding_box']['y_min']:.2f}, "
                       f"x_max={detection['bounding_box']['x_max']:.2f}, "
                       f"y_max={detection['bounding_box']['y_max']:.2f}]")
+            
+            # Check if image was returned
+            if return_image and 'image' in result and result['image'] is not None:
+                print("\nImage with bounding boxes was returned")
+                print(f"Content type: {result['image']['content_type']}")
+                print(f"Base64 data length: {len(result['image']['base64_data'])} characters")
+                
+                # Save the image if requested
+                save_path = os.path.join(os.path.dirname(image_path), 
+                                        f"{os.path.splitext(os.path.basename(image_path))[0]}_annotated.jpg")
+                
+                print(f"Saving annotated image to: {save_path}")
+                
+                # Decode base64 and save
+                import base64
+                with open(save_path, 'wb') as f:
+                    f.write(base64.b64decode(result['image']['base64_data']))
         else:
             print(f"Error: {response.status_code}")
             print(response.text)
@@ -111,6 +129,7 @@ def main():
     parser.add_argument("--url", type=str, default="http://localhost:9001", help="Base URL of the API")
     parser.add_argument("--backend", type=str, default="tflite", help="Backend to use for detection")
     parser.add_argument("--confidence", type=float, default=0.5, help="Confidence threshold")
+    parser.add_argument("--return-image", action="store_true", help="Request the API to return the image with bounding boxes")
     parser.add_argument("--test-backends", action="store_true", help="Test the backends endpoint")
     
     args = parser.parse_args()
@@ -121,7 +140,7 @@ def main():
     
     # Test detect endpoint
     if args.image:
-        test_detect_endpoint(args.image, f"{args.url}/api/v1/detect", args.backend, args.confidence)
+        test_detect_endpoint(args.image, f"{args.url}/api/v1/detect", args.backend, args.confidence, args.return_image)
     
     # If no arguments provided, show help
     if not args.image and not args.test_backends:

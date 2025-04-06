@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from typing import List, Optional, Dict, Any
 import io
+import base64
 from PIL import Image
 import time
 
-from models.detection import DetectionResponse, DetectionResult
+from models.detection import DetectionResponse, DetectionResult, ImageResponse
 from backends.factory import get_backend
-from utils.image import validate_image, preprocess_image
+from utils.image import validate_image, preprocess_image, image_to_bytes
 from config import settings
 
 router = APIRouter()
@@ -19,6 +20,9 @@ async def detect_objects(
     confidence_threshold: Optional[float] = Query(
         None, description="Confidence threshold for detections (0-1)"
     ),
+    return_image: bool = Query(
+        False, description="Return the image with bounding boxes drawn"
+    ),
 ):
     """
     Detect objects in an uploaded image using the specified backend.
@@ -26,6 +30,7 @@ async def detect_objects(
     - **file**: Image file to analyze
     - **backend**: Backend to use for detection (default: tflite)
     - **confidence_threshold**: Minimum confidence score for returned detections (0-1)
+    - **return_image**: If true, returns the image with bounding boxes drawn
     """
     # Validate backend
     if backend not in settings.AVAILABLE_BACKENDS:
@@ -58,8 +63,8 @@ async def detect_objects(
     
     process_time = time.time() - start_time
     
-    # Return results
-    return DetectionResponse(
+    # Prepare response
+    response = DetectionResponse(
         backend=backend,
         filename=file.filename,
         detections=detections,
@@ -67,6 +72,31 @@ async def detect_objects(
         image_width=image.width,
         image_height=image.height
     )
+    
+    # If requested, add image with bounding boxes
+    if return_image:
+        try:
+            # Draw bounding boxes on the image
+            annotated_image = detector.draw_detections(processed_image, detections)
+            
+            # Convert image to base64
+            img_format = "JPEG"
+            if file.filename.lower().endswith(".png"):
+                img_format = "PNG"
+                
+            img_bytes = image_to_bytes(annotated_image, format=img_format)
+            img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+            
+            # Add to response
+            response.image = ImageResponse(
+                content_type=f"image/{img_format.lower()}",
+                base64_data=img_base64
+            )
+        except Exception as e:
+            # If drawing fails, log but continue without image
+            print(f"Error drawing bounding boxes: {str(e)}")
+    
+    return response
 
 
 @router.get("/backends", response_model=Dict[str, Any])

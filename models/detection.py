@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 
 class BoundingBox(BaseModel):
@@ -42,6 +42,13 @@ class DetectionResult(BaseModel):
         }
 
 
+class ImageResponse(BaseModel):
+    """Image data response model."""
+    
+    content_type: str = Field(..., description="Image content type (e.g., 'image/jpeg')")
+    base64_data: str = Field(..., description="Base64 encoded image data")
+
+
 class DetectionResponse(BaseModel):
     """Response model for object detection API."""
     
@@ -51,6 +58,7 @@ class DetectionResponse(BaseModel):
     process_time_ms: int = Field(..., description="Processing time in milliseconds")
     image_width: int = Field(..., description="Original image width in pixels")
     image_height: int = Field(..., description="Original image height in pixels")
+    image: Optional[ImageResponse] = Field(None, description="Image with bounding boxes (if requested)")
     
     class Config:
         schema_extra = {
@@ -71,6 +79,7 @@ class DetectionResponse(BaseModel):
                 ],
                 "process_time_ms": 150,
                 "image_width": 640,
-                "image_height": 480
+                "image_height": 480,
+                "image": None
             }
         }

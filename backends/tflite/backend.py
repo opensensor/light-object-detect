@@ -1,7 +1,7 @@
 import os
 import numpy as np
-from typing import List, Dict, Any, Optional
-from PIL import Image
+from typing import List, Dict, Any, Optional, Tuple
+from PIL import Image, ImageDraw, ImageFont
 import tflite_runtime.interpreter as tflite
 
 from backends.base import DetectionBackend
@@ -172,6 +172,75 @@ class TFLiteBackend(DetectionBackend):
                 results.append(detection)
         
         return results
+    
+    def draw_detections(self, image: Image.Image, detections: List[DetectionResult]) -> Image.Image:
+        """
+        Draw bounding boxes and labels on the image.
+        
+        Args:
+            image: PIL Image to draw on
+            detections: List of DetectionResult objects
+            
+        Returns:
+            PIL Image with bounding boxes and labels drawn
+        """
+        # Create a copy of the image to draw on
+        draw_image = image.copy()
+        draw = ImageDraw.Draw(draw_image)
+        
+        # Try to load a font, use default if not available
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", 16)
+        except IOError:
+            font = ImageFont.load_default()
+        
+        # Define colors for different classes (cycling through a list)
+        colors = [
+            (255, 0, 0),    # Red
+            (0, 255, 0),    # Green
+            (0, 0, 255),    # Blue
+            (255, 255, 0),  # Yellow
+            (255, 0, 255),  # Magenta
+            (0, 255, 255),  # Cyan
+            (255, 128, 0),  # Orange
+            (128, 0, 255),  # Purple
+        ]
+        
+        # Draw each detection
+        for i, detection in enumerate(detections):
+            # Get pixel coordinates
+            box = detection.bounding_box.to_pixel_coords(image.width, image.height)
+            x_min, y_min = box["x_min"], box["y_min"]
+            x_max, y_max = box["x_max"], box["y_max"]
+            
+            # Select color based on class (cycling through the colors list)
+            color = colors[hash(detection.label) % len(colors)]
+            
+            # Draw rectangle
+            draw.rectangle([(x_min, y_min), (x_max, y_max)], outline=color, width=3)
+            
+            # Prepare label text with confidence
+            label_text = f"{detection.label}: {detection.confidence:.2f}"
+            
+            # Calculate text size and position
+            text_width, text_height = draw.textbbox((0, 0), label_text, font=font)[2:4]
+            text_background_coords = [
+                (x_min, max(0, y_min - text_height - 2)),
+                (x_min + text_width + 4, y_min)
+            ]
+            
+            # Draw text background
+            draw.rectangle(text_background_coords, fill=color)
+            
+            # Draw text
+            draw.text(
+                (x_min + 2, max(0, y_min - text_height - 2)),
+                label_text,
+                fill=(255, 255, 255),
+                font=font
+            )
+        
+        return draw_image
     
     def get_model_info(self) -> Dict[str, Any]:
         """

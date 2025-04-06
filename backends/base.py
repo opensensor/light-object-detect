@@ -36,3 +36,17 @@ class DetectionBackend(ABC):
             Dictionary with model information
         """
         pass
+    
+    @abstractmethod
+    def draw_detections(self, image: Image.Image, detections: List[DetectionResult]) -> Image.Image:
+        """
+        Draw bounding boxes and labels on the image.
+        
+        Args:
+            image: PIL Image to draw on
+            detections: List of DetectionResult objects
+            
+        Returns:
+            PIL Image with bounding boxes and labels drawn
+        """
+        pass
