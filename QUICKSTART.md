@@ -15,19 +15,36 @@ pipenv install
 
 You have several options for getting detection models:
 
-#### Option A: Use TFLite Backend (Easiest - Already Included)
+#### Option A: Use TFLite Backend (Easiest - Lightweight)
 
-The TFLite backend works out of the box with the included model:
+The TFLite backend uses TensorFlow Lite for efficient inference on CPU. It's lightweight and works well on embedded systems.
 
+**Install dependencies:**
 ```bash
-# Create .env file
+pipenv install  # Installs TensorFlow which includes TFLite
+```
+
+**Download the model:**
+```bash
+# Download SSD MobileNet V1 TFLite model
+bash scripts/download_tflite_models.sh --model-type ssd_mobilenet_v1
+
+# Or for a more accurate model:
+# bash scripts/download_tflite_models.sh --model-type ssd_mobilenet_v2
+# bash scripts/download_tflite_models.sh --model-type efficientdet_lite0
+```
+
+**Configure:**
+```bash
 cat > .env << EOF
 BACKEND=tflite
-TFLITE_MODEL_PATH=models/detect.tflite
-TFLITE_LABELS_PATH=models/labelmap.txt
+TFLITE_MODEL_PATH=backends/tflite/models/ssd_mobilenet_v1.tflite
+TFLITE_LABELS_PATH=backends/tflite/models/coco_labels.txt
 TFLITE_CONFIDENCE_THRESHOLD=0.5
 EOF
 ```
+
+**Note:** We use TensorFlow (which includes TFLite) instead of the deprecated `tflite-runtime` package. The backend automatically uses TensorFlow's TFLite interpreter. You may see a deprecation warning about migrating to `ai-edge-litert`, but this can be ignored for now as the new package doesn't support Python 3.12+.
 
 #### Option B: Download YOLOv8 ONNX Model (Recommended for Best Performance)
 

@@ -2,7 +2,27 @@ import os
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
-import tflite_runtime.interpreter as tflite
+
+try:
+    # Try to import from TensorFlow first (most compatible)
+    import tensorflow as tf
+    Interpreter = tf.lite.Interpreter
+except ImportError:
+    try:
+        # Fall back to ai_edge_litert (new LiteRT package, Python 3.8-3.11 only)
+        from ai_edge_litert.interpreter import Interpreter
+    except ImportError:
+        try:
+            # Last resort: tflite_runtime (deprecated)
+            import tflite_runtime.interpreter as tflite
+            Interpreter = tflite.Interpreter
+        except ImportError:
+            raise ImportError(
+                "No TFLite interpreter found. Please install one of:\n"
+                "  pip install tensorflow  (recommended - includes TFLite)\n"
+                "  pip install ai-edge-litert  (new LiteRT, Python 3.8-3.11)\n"
+                "  pip install tflite-runtime  (lightweight, deprecated)"
+            )
 
 from backends.base import DetectionBackend
 from models.detection import DetectionResult, BoundingBox
@@ -31,7 +51,7 @@ class TFLiteBackend(DetectionBackend):
             raise FileNotFoundError(f"TFLite model not found at {model_path}. Please download a model and place it at this location.")
         
         # Load model
-        self.interpreter = tflite.Interpreter(model_path=model_path)
+        self.interpreter = Interpreter(model_path=model_path)
         self.interpreter.allocate_tensors()
         
         # Get model details

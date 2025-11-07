@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Default values
-MODEL_DIR="models"
+MODEL_DIR="backends/onnx/models"
 MODEL_SIZE="n"
 
 # Parse arguments
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --model-size SIZE    Model size: n, s, m, l, x (default: n)"
-            echo "  --output-dir DIR     Output directory (default: models)"
+            echo "  --output-dir DIR     Output directory (default: backends/onnx/models)"
             echo "  --help               Show this help message"
             exit 0
             ;;

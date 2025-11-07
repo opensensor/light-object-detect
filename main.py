@@ -1,16 +1,45 @@
 import uvicorn
+import logging
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 
 from api.router import router as api_router
 from config import settings
+from backends.factory import get_backend
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Light Object Detection API",
     description="A lightweight API for object detection with pluggable backends",
     version="0.1.0",
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Log backend availability on startup."""
+    logger.info("=" * 60)
+    logger.info("Light Object Detection API Starting")
+    logger.info("=" * 60)
+    logger.info(f"Available backends: {settings.AVAILABLE_BACKENDS}")
+    logger.info(f"Default backend: {settings.DEFAULT_BACKEND}")
+
+    # Test each backend
+    for backend_name in settings.AVAILABLE_BACKENDS:
+        try:
+            detector = get_backend(backend_name)
+            model_info = detector.get_model_info()
+            logger.info(f"✓ {backend_name.upper()} backend: {model_info.get('model_path', 'N/A')}")
+        except Exception as e:
+            logger.error(f"✗ {backend_name.upper()} backend failed: {str(e)}")
+
+    logger.info("=" * 60)
 
 # Add CORS middleware
 app.add_middleware(

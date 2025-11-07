@@ -10,16 +10,16 @@ python-multipart = "*"
 pydantic = "*"
 pydantic-settings = "*"
 pillow = "*"
-tflite = "*"
 exceptiongroup = "*"
-tflite-runtime = "*"
-numpy = "==1.26.4"
-onnxruntime = "*"
+numpy = "*"
+tensorflow = "*"
+onnxruntime = "==1.23.2"
 opencv-python = "*"
 scipy = "*"
 shapely = "*"
 
 [dev-packages]
+ultralytics = "*"
 
 [requires]
 python_version = "3.9"

@@ -132,17 +132,20 @@ class ONNXBackend(DetectionBackend):
         
         return img_array, scale, (pad_w, pad_h)
     
-    def postprocess_yolov8(self, outputs: List[np.ndarray], scale: float, 
-                          pad: Tuple[int, int], confidence_threshold: float) -> List[DetectionResult]:
+    def postprocess_yolov8(self, outputs: List[np.ndarray], scale: float,
+                          pad: Tuple[int, int], confidence_threshold: float,
+                          orig_width: int, orig_height: int) -> List[DetectionResult]:
         """
         Postprocess YOLOv8 outputs.
-        
+
         Args:
             outputs: Model outputs
             scale: Scale factor used in preprocessing
             pad: Padding used in preprocessing (pad_w, pad_h)
             confidence_threshold: Confidence threshold
-            
+            orig_width: Original image width
+            orig_height: Original image height
+
         Returns:
             List of DetectionResult objects
         """
@@ -196,14 +199,12 @@ class ONNXBackend(DetectionBackend):
             y_min = (y_mins[idx] - pad_h) / scale
             x_max = (x_maxs[idx] - pad_w) / scale
             y_max = (y_maxs[idx] - pad_h) / scale
-            
-            # Normalize to [0, 1]
-            # Note: We need original image dimensions for proper normalization
-            # For now, we'll store as normalized coordinates assuming the scale factor
-            x_min_norm = max(0.0, min(1.0, x_min / (self.input_width / scale)))
-            y_min_norm = max(0.0, min(1.0, y_min / (self.input_height / scale)))
-            x_max_norm = max(0.0, min(1.0, x_max / (self.input_width / scale)))
-            y_max_norm = max(0.0, min(1.0, y_max / (self.input_height / scale)))
+
+            # Normalize to [0, 1] using original image dimensions
+            x_min_norm = max(0.0, min(1.0, x_min / orig_width))
+            y_min_norm = max(0.0, min(1.0, y_min / orig_height))
+            x_max_norm = max(0.0, min(1.0, x_max / orig_width))
+            y_max_norm = max(0.0, min(1.0, y_max / orig_height))
             
             class_id = int(class_ids[idx])
             label = self.labels[class_id] if class_id < len(self.labels) else f"class_{class_id}"
@@ -288,6 +289,9 @@ class ONNXBackend(DetectionBackend):
         if confidence_threshold is None:
             confidence_threshold = self.confidence_threshold
 
+        # Get original image dimensions
+        orig_width, orig_height = image.size
+
         # Preprocess image
         input_data, scale, pad = self.preprocess_image(image)
 
@@ -296,10 +300,10 @@ class ONNXBackend(DetectionBackend):
 
         # Postprocess based on model type
         if self.model_type in ["yolov8", "yolov5", "yolox"]:
-            results = self.postprocess_yolov8(outputs, scale, pad, confidence_threshold)
+            results = self.postprocess_yolov8(outputs, scale, pad, confidence_threshold, orig_width, orig_height)
         else:
             # Default to YOLOv8 postprocessing
-            results = self.postprocess_yolov8(outputs, scale, pad, confidence_threshold)
+            results = self.postprocess_yolov8(outputs, scale, pad, confidence_threshold, orig_width, orig_height)
 
         return results
 

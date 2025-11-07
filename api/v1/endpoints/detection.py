@@ -4,6 +4,7 @@ import io
 import base64
 from PIL import Image
 import time
+import logging
 
 from models.detection import DetectionResponse, DetectionResult, ImageResponse
 from models.zone import ZoneConfiguration
@@ -11,6 +12,9 @@ from backends.factory import get_backend
 from utils.image import validate_image, preprocess_image, image_to_bytes
 from utils.zones import filter_detections_by_zones, apply_class_filter, apply_size_filter
 from config import settings
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -50,33 +54,56 @@ async def detect_objects(
     - **min_width**: Minimum width filter for detections
     - **min_height**: Minimum height filter for detections
     """
+    logger.info(f"Detection request: backend={backend}, confidence={confidence_threshold}, filename={file.filename}")
+
     # Validate backend
     if backend not in settings.AVAILABLE_BACKENDS:
+        logger.error(f"Invalid backend requested: {backend}")
         raise HTTPException(
             status_code=400,
             detail=f"Backend '{backend}' not available. Available backends: {settings.AVAILABLE_BACKENDS}"
         )
-    
+
     # Get detection backend
-    detector = get_backend(backend)
-    
+    try:
+        detector = get_backend(backend)
+        logger.debug(f"Backend {backend} initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize backend {backend}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Backend initialization error: {str(e)}")
+
     # Read and validate image
     try:
         contents = await file.read()
+        logger.debug(f"Read {len(contents)} bytes from uploaded file")
         image = Image.open(io.BytesIO(contents))
+        logger.debug(f"Image opened: size={image.size}, mode={image.mode}")
         validate_image(image, file.filename)
         processed_image = preprocess_image(image)
+        logger.debug(f"Image preprocessed: size={processed_image.size}")
     except Exception as e:
+        logger.error(f"Image validation/processing failed: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Invalid image: {str(e)}")
     
     # Set confidence threshold
     threshold = confidence_threshold or settings.TFLITE_CONFIDENCE_THRESHOLD
-    
+    logger.debug(f"Using confidence threshold: {threshold}")
+
     # Perform detection
     start_time = time.time()
     try:
         detections = detector.detect(processed_image, confidence_threshold=threshold)
+        detection_time = time.time() - start_time
+        logger.info(f"Detection completed: {len(detections)} objects found in {detection_time*1000:.1f}ms")
+
+        # Log detected objects
+        if detections:
+            class_counts = {}
+            for det in detections:
+                class_counts[det.label] = class_counts.get(det.label, 0) + 1
+            logger.info(f"Detected objects: {dict(class_counts)}")
     except Exception as e:
+        logger.error(f"Detection failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Detection error: {str(e)}")
 
     # Apply zone filtering if zones are provided
@@ -84,22 +111,29 @@ async def detect_objects(
         try:
             import json
             zone_config = ZoneConfiguration(**json.loads(zones))
+            initial_count = len(detections)
             detections = filter_detections_by_zones(detections, zone_config)
+            logger.info(f"Zone filtering: {initial_count} -> {len(detections)} detections")
         except Exception as e:
+            logger.error(f"Zone filtering failed: {str(e)}")
             raise HTTPException(status_code=400, detail=f"Invalid zone configuration: {str(e)}")
 
     # Apply class filtering if specified
     if filter_classes:
         allowed_classes = [c.strip() for c in filter_classes.split(',')]
+        initial_count = len(detections)
         detections = apply_class_filter(detections, allowed_classes=allowed_classes)
+        logger.info(f"Class filtering ({filter_classes}): {initial_count} -> {len(detections)} detections")
 
     # Apply size filtering if specified
     if min_width is not None or min_height is not None:
+        initial_count = len(detections)
         detections = apply_size_filter(
             detections,
             min_width=min_width,
             min_height=min_height
         )
+        logger.info(f"Size filtering (w>={min_width}, h>={min_height}): {initial_count} -> {len(detections)} detections")
 
     process_time = time.time() - start_time
     
@@ -112,30 +146,34 @@ async def detect_objects(
         image_width=image.width,
         image_height=image.height
     )
-    
+
+    logger.info(f"Response prepared: {len(detections)} detections, {process_time*1000:.1f}ms total")
+
     # If requested, add image with bounding boxes
     if return_image:
         try:
+            logger.debug("Drawing bounding boxes on image")
             # Draw bounding boxes on the image
             annotated_image = detector.draw_detections(processed_image, detections)
-            
+
             # Convert image to base64
             img_format = "JPEG"
             if file.filename.lower().endswith(".png"):
                 img_format = "PNG"
-                
+
             img_bytes = image_to_bytes(annotated_image, format=img_format)
             img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-            
+
             # Add to response
             response.image = ImageResponse(
                 content_type=f"image/{img_format.lower()}",
                 base64_data=img_base64
             )
+            logger.debug(f"Annotated image added to response ({len(img_base64)} bytes base64)")
         except Exception as e:
             # If drawing fails, log but continue without image
-            print(f"Error drawing bounding boxes: {str(e)}")
-    
+            logger.error(f"Error drawing bounding boxes: {str(e)}", exc_info=True)
+
     return response
 
 

@@ -8,10 +8,10 @@ import sys
 import argparse
 from pathlib import Path
 
-def download_yolov8_onnx(model_size='n', output_dir='models'):
+def download_yolov8_onnx(model_size='n', output_dir='backends/onnx/models'):
     """
     Download YOLOv8 model and export to ONNX format.
-    
+
     Args:
         model_size: Model size (n, s, m, l, x)
         output_dir: Directory to save the model
@@ -32,9 +32,9 @@ def download_yolov8_onnx(model_size='n', output_dir='models'):
     
     print(f"Downloading YOLOv8{model_size} model...")
     model = YOLO(model_name)
-    
-    print(f"Exporting to ONNX format...")
-    onnx_path = model.export(format='onnx', simplify=True)
+
+    print(f"Exporting to ONNX format (opset 21 for compatibility)...")
+    onnx_path = model.export(format='onnx', simplify=True, opset=21)
     
     # Move to output directory
     final_path = output_path / onnx_name
@@ -48,7 +48,7 @@ def download_yolov8_onnx(model_size='n', output_dir='models'):
     return final_path
 
 
-def create_coco_labels(output_dir='models'):
+def create_coco_labels(output_dir='backends/onnx/models'):
     """Create COCO labels file."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -87,7 +87,7 @@ def main():
     )
     parser.add_argument(
         '--output-dir',
-        default='models',
+        default='backends/onnx/models',
         help='Output directory for models and labels'
     )
     parser.add_argument(
