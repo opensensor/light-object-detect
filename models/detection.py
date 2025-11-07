@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Union
+from pydantic import BaseModel, Field, validator
+from typing import List, Optional, Dict, Any, Union, Tuple
 
 
 class BoundingBox(BaseModel):
@@ -22,11 +22,13 @@ class BoundingBox(BaseModel):
 
 class DetectionResult(BaseModel):
     """Result of a single object detection."""
-    
+
     label: str = Field(..., description="Class label of the detected object")
     confidence: float = Field(..., description="Confidence score (0-1)")
     bounding_box: BoundingBox = Field(..., description="Bounding box coordinates")
-    
+    track_id: Optional[int] = Field(None, description="Tracking ID for object tracking across frames")
+    zone_id: Optional[str] = Field(None, description="Zone ID if detection is within a defined zone")
+
     class Config:
         schema_extra = {
             "example": {
@@ -37,7 +39,9 @@ class DetectionResult(BaseModel):
                     "y_min": 0.2,
                     "x_max": 0.3,
                     "y_max": 0.4
-                }
+                },
+                "track_id": 1,
+                "zone_id": "entrance"
             }
         }
 

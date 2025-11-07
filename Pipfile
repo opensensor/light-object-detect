@@ -14,6 +14,10 @@ tflite = "*"
 exceptiongroup = "*"
 tflite-runtime = "*"
 numpy = "==1.26.4"
+onnxruntime = "*"
+opencv-python = "*"
+scipy = "*"
+shapely = "*"
 
 [dev-packages]
 
