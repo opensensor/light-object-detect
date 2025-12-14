@@ -387,33 +387,46 @@ class EdgeTPUBackend(DetectionBackend):
 
     def _determine_ssd_indices(self):
         """Determine the output tensor indices for SSD models."""
-        # Typical SSD output shapes:
-        # boxes: (1, N, 4) - bounding boxes
-        # classes: (1, N) - class IDs
-        # scores: (1, N) - confidence scores
-        # count: (1,) - number of detections
+        # Typical SSD output shapes (TFLite_Detection_PostProcess):
+        # [0] boxes: (1, N, 4) - bounding boxes
+        # [1] classes: (1, N) - class IDs (float32 but contains integers)
+        # [2] scores: (1, N) - confidence scores
+        # [3] count: (1,) - number of detections
+
+        shape_2d_indices = []
 
         for i, details in enumerate(self.output_details):
             shape = details['shape']
             if len(shape) == 3 and shape[2] == 4:
                 self.output_boxes_index = i
             elif len(shape) == 2:
-                # Could be classes or scores - check dtype
-                if details['dtype'] in [np.float32, np.float16]:
-                    self.output_scores_index = i
-                else:
-                    self.output_class_ids_index = i
+                # Collect 2D tensors - we'll assign them by order
+                shape_2d_indices.append(i)
             elif len(shape) == 1:
                 self.output_count_index = i
 
+        # For standard SSD models, 2D outputs are [class_ids, scores] in order
+        if len(shape_2d_indices) >= 2:
+            self.output_class_ids_index = shape_2d_indices[0]
+            self.output_scores_index = shape_2d_indices[1]
+        elif len(shape_2d_indices) == 1:
+            # Only one 2D output - assume it's scores
+            self.output_scores_index = shape_2d_indices[0]
+
         # Fallback to standard order if detection failed
-        if self.output_boxes_index is None:
+        if self.output_boxes_index is None or self.output_class_ids_index is None:
             self.output_boxes_index = 0
             self.output_class_ids_index = 1
             self.output_scores_index = 2
             self.output_count_index = 3
 
         self._ssd_indices_determined = True
+
+        logger.debug(
+            f"SSD output indices: boxes={self.output_boxes_index}, "
+            f"class_ids={self.output_class_ids_index}, scores={self.output_scores_index}, "
+            f"count={self.output_count_index}"
+        )
 
     def _postprocess_yolo(
         self, confidence_threshold: float, orig_width: int, orig_height: int
