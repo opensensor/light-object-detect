@@ -17,6 +17,12 @@ try:
 except ImportError:
     OPENCV_AVAILABLE = False
 
+try:
+    from backends.edgetpu.backend import EdgeTPUBackend
+    EDGETPU_AVAILABLE = True
+except ImportError:
+    EDGETPU_AVAILABLE = False
+
 
 # Registry of available backends
 BACKEND_REGISTRY: Dict[str, Type[DetectionBackend]] = {
@@ -29,6 +35,9 @@ if ONNX_AVAILABLE:
 
 if OPENCV_AVAILABLE:
     BACKEND_REGISTRY["opencv"] = OpenCVBackend
+
+if EDGETPU_AVAILABLE:
+    BACKEND_REGISTRY["edgetpu"] = EdgeTPUBackend
 
 
 def get_backend(backend_name: str) -> DetectionBackend:
@@ -73,6 +82,15 @@ def get_backend(backend_name: str) -> DetectionBackend:
             nms_threshold=settings.OPENCV_NMS_THRESHOLD,
             model_type=settings.OPENCV_MODEL_TYPE,
             input_size=settings.OPENCV_INPUT_SIZE
+        )
+    elif backend_name == "edgetpu":
+        return backend_class(
+            model_path=settings.EDGETPU_MODEL_PATH,
+            labels_path=settings.EDGETPU_LABELS_PATH,
+            confidence_threshold=settings.EDGETPU_CONFIDENCE_THRESHOLD,
+            device=settings.EDGETPU_DEVICE,
+            model_type=settings.EDGETPU_MODEL_TYPE,
+            iou_threshold=settings.EDGETPU_IOU_THRESHOLD
         )
 
     # Default initialization for other backends

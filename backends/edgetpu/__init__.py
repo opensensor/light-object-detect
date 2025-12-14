@@ -1,0 +1,2 @@
+# EdgeTPU (Coral) detection backend
+
