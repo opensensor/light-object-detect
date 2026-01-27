@@ -49,9 +49,51 @@ A lightweight Python API for object detection with pluggable backends. This API 
 
 3. Access the API documentation at http://localhost:9001/docs
 
+## Docker (z.B. Unraid / lightNVR)
+
+### Build
+
+```bash
+docker build -t light-object-detect:local .
+```
+
+### Run
+
+Option A: ohne `.env` (Defaults aus `config.py`):
+
+```bash
+docker run --rm -p 8000:8000 --name light-object-detect light-object-detect:local
+```
+
+Option B: mit `.env` (empfohlen, z.B. Backend/Model-Pfade):
+
+```bash
+docker run --rm -p 8000:8000 --name light-object-detect \
+  -v "$(pwd)/.env:/app/.env:ro" \
+  light-object-detect:local
+```
+
+PowerShell:
+
+```powershell
+docker run --rm -p 8000:8000 --name light-object-detect `
+  -v "${PWD}\.env:/app/.env:ro" `
+  light-object-detect:local
+```
+
+- **Healthcheck**: `GET /health`
+- **Swagger UI**: `GET /docs`
+
+### lightNVR Integration
+
+In lightNVR als API-URL typischerweise:
+
+- `http://<docker-host>:8000/api/v1/detect`
+
 ## API Endpoints
 
 - `GET /` - Root endpoint with API information
+- `GET /health` - Health check endpoint (useful for Docker/Unraid)
 - `GET /api/v1/backends` - List available detection backends
 - `POST /api/v1/detect` - Detect objects in an uploaded image
 
