@@ -57,6 +57,9 @@ A lightweight Python API for object detection with pluggable backends. This API 
 docker build -t light-object-detect:local .
 ```
 
+By default, the image downloads a small reference TFLite model at build time so the `tflite` backend works out of the box.
+To disable this, build with `--build-arg DOWNLOAD_DEFAULT_MODEL=0`.
+
 ### Run
 
 Option A: without `.env` (uses defaults from `config.py`):
