@@ -28,10 +28,12 @@ A lightweight Python API for object detection with pluggable backends. This API 
    pipenv install
    ```
 
-3. Download a sample TFLite model:
+3. (Optional) Pre-download the default TFLite model:
    ```bash
    pipenv run python scripts/download_model.py
    ```
+
+   If you skip this step, the API will try to download the default model on startup when the `tflite` backend is enabled (requires internet access). Docker builds download the default model by default.
 
 ## Usage
 
