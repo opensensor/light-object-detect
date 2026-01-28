@@ -28,10 +28,12 @@ A lightweight Python API for object detection with pluggable backends. This API 
    pipenv install
    ```
 
-3. Download a sample TFLite model:
+3. (Optional) Pre-download the default TFLite model:
    ```bash
    pipenv run python scripts/download_model.py
    ```
+
+   If you skip this step, the API will try to download the default model on startup when the `tflite` backend is enabled (requires internet access). Docker builds download the default model by default.
 
 ## Usage
 
@@ -49,7 +51,7 @@ A lightweight Python API for object detection with pluggable backends. This API 
 
 3. Access the API documentation at http://localhost:9001/docs
 
-## Docker (z.B. Unraid / lightNVR)
+## Docker (e.g. Unraid / lightNVR)
 
 ### Build
 
@@ -57,15 +59,18 @@ A lightweight Python API for object detection with pluggable backends. This API 
 docker build -t light-object-detect:local .
 ```
 
+By default, the image downloads a small reference TFLite model at build time so the `tflite` backend works out of the box.
+To disable this, build with `--build-arg DOWNLOAD_DEFAULT_MODEL=0`.
+
 ### Run
 
-Option A: ohne `.env` (Defaults aus `config.py`):
+Option A: without `.env` (uses defaults from `config.py`):
 
 ```bash
 docker run --rm -p 8000:8000 --name light-object-detect light-object-detect:local
 ```
 
-Option B: mit `.env` (empfohlen, z.B. Backend/Model-Pfade):
+Option B: with `.env` (recommended, e.g. for backend/model paths):
 
 ```bash
 docker run --rm -p 8000:8000 --name light-object-detect \
@@ -86,7 +91,7 @@ docker run --rm -p 8000:8000 --name light-object-detect `
 
 ### lightNVR Integration
 
-In lightNVR als API-URL typischerweise:
+In lightNVR, the API URL is typically:
 
 - `http://<docker-host>:8000/api/v1/detect`
 

@@ -34,6 +34,11 @@ RUN python -m pip install --upgrade pip \
 
 COPY . .
 
+# Bake the default TFLite model into the image (can be disabled at build time).
+# Usage: docker build --build-arg DOWNLOAD_DEFAULT_MODEL=0 ...
+ARG DOWNLOAD_DEFAULT_MODEL=1
+RUN if [ "$DOWNLOAD_DEFAULT_MODEL" = "1" ]; then python scripts/download_model.py; fi
+
 EXPOSE 8000
 
 # .env is optional; Unraid can mount it to /app/.env

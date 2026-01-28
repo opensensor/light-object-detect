@@ -7,6 +7,7 @@ from typing import List, Optional
 from api.router import router as api_router
 from config import settings
 from backends.factory import get_backend
+from utils.model_download import ensure_tflite_ssd_mobilenet_v1, ModelDownloadError
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +30,25 @@ async def startup_event():
     logger.info("=" * 60)
     logger.info(f"Available backends: {settings.AVAILABLE_BACKENDS}")
     logger.info(f"Default backend: {settings.DEFAULT_BACKEND}")
+
+    # Ensure the default TFLite model is present if TFLite is enabled.
+    # This keeps the out-of-the-box experience working, while still allowing
+    # users to override paths via .env.
+    if "tflite" in settings.AVAILABLE_BACKENDS:
+        try:
+            ensure_result = ensure_tflite_ssd_mobilenet_v1(
+                model_path=settings.TFLITE_MODEL_PATH,
+                labels_path=settings.TFLITE_LABELS_PATH,
+                force=False,
+            )
+            if ensure_result.did_download:
+                logger.info(f"✓ Downloaded default TFLite model: {ensure_result.message}")
+        except ModelDownloadError as e:
+            logger.error(
+                "✗ TFLite model is missing and could not be downloaded. "
+                f"Reason: {e}. "
+                "Fix: run 'python scripts/download_model.py' or set TFLITE_MODEL_PATH to an existing model."
+            )
 
     # Test each backend
     for backend_name in settings.AVAILABLE_BACKENDS:
