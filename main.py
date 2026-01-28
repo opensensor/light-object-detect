@@ -63,5 +63,10 @@ async def root():
         "available_backends": settings.AVAILABLE_BACKENDS,
     }
 
+@app.get("/health")
+async def health():
+    """Health check endpoint for container orchestrators."""
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=9001, reload=True)

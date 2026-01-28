@@ -1,0 +1,10 @@
+services:
+  light-object-detect:
+    build: .
+    container_name: light-object-detect
+    ports:
+      - "8000:8000"
+    # Optional: provide config via a bind-mounted .env file
+    # volumes:
+    #   - ./docker.env:/app/.env:ro
+    restart: unless-stopped
