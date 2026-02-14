@@ -15,13 +15,13 @@ class ONNXBackend(DetectionBackend):
                  iou_threshold: float = 0.45, model_type: str = "yolov8"):
         """
         Initialize the ONNX detection backend.
-        
+
         Args:
             model_path: Path to the ONNX model file
             labels_path: Path to the labels file
             confidence_threshold: Default confidence threshold
             iou_threshold: IoU threshold for NMS
-            model_type: Type of model (yolov8, yolov5, yolox, etc.)
+            model_type: Type of model (yolov8, yolo11, yolo26, yolov5, yolox, etc.)
         """
         self.model_path = model_path
         self.labels_path = labels_path
@@ -136,7 +136,10 @@ class ONNXBackend(DetectionBackend):
                           pad: Tuple[int, int], confidence_threshold: float,
                           orig_width: int, orig_height: int) -> List[DetectionResult]:
         """
-        Postprocess YOLOv8 outputs.
+        Postprocess YOLOv8/YOLO11 outputs.
+
+        Both YOLOv8 and YOLO11 share the same output format:
+        (1, 84, 8400) = (batch, 4_bbox + 80_classes, num_predictions)
 
         Args:
             outputs: Model outputs
@@ -149,7 +152,7 @@ class ONNXBackend(DetectionBackend):
         Returns:
             List of DetectionResult objects
         """
-        # YOLOv8 output shape: (1, 84, 8400) or (1, num_classes+4, num_predictions)
+        # YOLOv8/YOLO11 output shape: (1, 84, 8400) or (1, num_classes+4, num_predictions)
         # Format: [x_center, y_center, width, height, class_scores...]
         output = outputs[0]
         
@@ -223,6 +226,69 @@ class ONNXBackend(DetectionBackend):
         
         return results
     
+    def postprocess_yolo26(self, outputs: List[np.ndarray], scale: float,
+                          pad: Tuple[int, int], confidence_threshold: float,
+                          orig_width: int, orig_height: int) -> List[DetectionResult]:
+        """
+        Postprocess YOLO26 (NMS-free, end-to-end) outputs.
+
+        YOLO26 output shape: (1, 300, 6) = (batch, max_detections, [x1, y1, x2, y2, conf, class_id])
+        Coordinates are in input-image pixel space (640×640 with letterbox padding).
+        NMS is already applied inside the model — no manual NMS needed.
+
+        Args:
+            outputs: Model outputs
+            scale: Scale factor used in preprocessing
+            pad: Padding used in preprocessing (pad_w, pad_h)
+            confidence_threshold: Confidence threshold
+            orig_width: Original image width
+            orig_height: Original image height
+
+        Returns:
+            List of DetectionResult objects
+        """
+        output = outputs[0]  # Shape: (1, 300, 6)
+        if len(output.shape) == 3:
+            output = output[0]  # Shape: (300, 6)
+
+        pad_w, pad_h = pad
+        results = []
+
+        for detection in output:
+            x1, y1, x2, y2, conf, class_id = detection
+
+            if conf < confidence_threshold:
+                continue
+
+            # Remove padding and scale back to original image coordinates
+            x_min = (x1 - pad_w) / scale
+            y_min = (y1 - pad_h) / scale
+            x_max = (x2 - pad_w) / scale
+            y_max = (y2 - pad_h) / scale
+
+            # Normalize to [0, 1] using original image dimensions
+            x_min_norm = max(0.0, min(1.0, x_min / orig_width))
+            y_min_norm = max(0.0, min(1.0, y_min / orig_height))
+            x_max_norm = max(0.0, min(1.0, x_max / orig_width))
+            y_max_norm = max(0.0, min(1.0, y_max / orig_height))
+
+            cid = int(class_id)
+            label = self.labels[cid] if cid < len(self.labels) else f"class_{cid}"
+
+            detection_result = DetectionResult(
+                label=label,
+                confidence=float(conf),
+                bounding_box=BoundingBox(
+                    x_min=x_min_norm,
+                    y_min=y_min_norm,
+                    x_max=x_max_norm,
+                    y_max=y_max_norm
+                )
+            )
+            results.append(detection_result)
+
+        return results
+
     def _nms(self, boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> List[int]:
         """
         Non-Maximum Suppression.
@@ -299,10 +365,12 @@ class ONNXBackend(DetectionBackend):
         outputs = self.session.run(self.output_names, {self.input_name: input_data})
 
         # Postprocess based on model type
-        if self.model_type in ["yolov8", "yolov5", "yolox"]:
+        if self.model_type == "yolo26":
+            results = self.postprocess_yolo26(outputs, scale, pad, confidence_threshold, orig_width, orig_height)
+        elif self.model_type in ["yolov8", "yolo11", "yolov5", "yolox"]:
             results = self.postprocess_yolov8(outputs, scale, pad, confidence_threshold, orig_width, orig_height)
         else:
-            # Default to YOLOv8 postprocessing
+            # Default to YOLOv8/YOLO11 postprocessing (same format)
             results = self.postprocess_yolov8(outputs, scale, pad, confidence_threshold, orig_width, orig_height)
 
         return results

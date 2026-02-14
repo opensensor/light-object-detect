@@ -14,7 +14,7 @@ RUN apt-get update \
         libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps (keeps this image self-contained for Unraid)
+# Core Python deps (ONNX is now the default backend)
 COPY Pipfile Pipfile.lock ./
 RUN python -m pip install --upgrade pip \
     && python -m pip install \
@@ -26,17 +26,21 @@ RUN python -m pip install --upgrade pip \
         pillow \
         exceptiongroup \
         numpy \
-        tensorflow \
-        onnxruntime==1.23.2 \
+        onnxruntime \
         opencv-python \
         scipy \
         shapely
 
+# Optional: install tensorflow for tflite backend support
+# Usage: docker build --build-arg INSTALL_TENSORFLOW=1 ...
+ARG INSTALL_TENSORFLOW=0
+RUN if [ "$INSTALL_TENSORFLOW" = "1" ]; then python -m pip install tensorflow; fi
+
 COPY . .
 
-# Bake the default TFLite model into the image (can be disabled at build time).
-# Usage: docker build --build-arg DOWNLOAD_DEFAULT_MODEL=0 ...
-ARG DOWNLOAD_DEFAULT_MODEL=1
+# Optionally bake the TFLite model (only useful if tensorflow is installed)
+# Usage: docker build --build-arg DOWNLOAD_DEFAULT_MODEL=1 ...
+ARG DOWNLOAD_DEFAULT_MODEL=0
 RUN if [ "$DOWNLOAD_DEFAULT_MODEL" = "1" ]; then python scripts/download_model.py; fi
 
 EXPOSE 8000

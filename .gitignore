@@ -34,6 +34,9 @@ ENV/
 # TFLite models and data
 backends/tflite/models/
 
+# PyTorch weights (used only for export, not deployed)
+*.pt
+
 # Logs
 *.log
 

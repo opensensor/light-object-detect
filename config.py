@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Light Object Detection API"
 
     # Backend settings
-    DEFAULT_BACKEND: str = "tflite"
-    AVAILABLE_BACKENDS: List[str] = ["tflite", "onnx", "opencv", "edgetpu"]
+    DEFAULT_BACKEND: str = "onnx"
+    AVAILABLE_BACKENDS: List[str] = ["onnx", "tflite", "opencv", "edgetpu"]
 
     # TFLite settings
     TFLITE_MODEL_PATH: str = "backends/tflite/models/ssd_mobilenet_v1.tflite"
@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     TFLITE_CONFIDENCE_THRESHOLD: float = 0.5
 
     # ONNX settings
-    ONNX_MODEL_PATH: str = "backends/onnx/models/yolov8n.onnx"
+    ONNX_MODEL_PATH: str = "backends/onnx/models/yolo11n.onnx"
     ONNX_LABELS_PATH: str = "backends/onnx/models/coco.txt"
     ONNX_CONFIDENCE_THRESHOLD: float = 0.5
     ONNX_IOU_THRESHOLD: float = 0.45
-    ONNX_MODEL_TYPE: str = "yolov8"
+    ONNX_MODEL_TYPE: str = "yolo11"
 
     # OpenCV DNN settings
     OPENCV_MODEL_PATH: str = "backends/opencv/models/yolov4-tiny.weights"

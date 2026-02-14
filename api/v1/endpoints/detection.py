@@ -8,7 +8,7 @@ import logging
 
 from models.detection import DetectionResponse, DetectionResult, ImageResponse
 from models.zone import ZoneConfiguration
-from backends.factory import get_backend
+from backends.factory import get_backend, BACKEND_REGISTRY
 from utils.image import validate_image, preprocess_image, image_to_bytes
 from utils.zones import filter_detections_by_zones, apply_class_filter, apply_size_filter
 from config import settings
@@ -85,8 +85,14 @@ async def detect_objects(
         logger.error(f"Image validation/processing failed: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Invalid image: {str(e)}")
     
-    # Set confidence threshold
-    threshold = confidence_threshold or settings.TFLITE_CONFIDENCE_THRESHOLD
+    # Set confidence threshold — use the backend-specific default
+    if backend == "onnx":
+        default_threshold = settings.ONNX_CONFIDENCE_THRESHOLD
+    elif backend == "tflite":
+        default_threshold = settings.TFLITE_CONFIDENCE_THRESHOLD
+    else:
+        default_threshold = 0.5
+    threshold = confidence_threshold or default_threshold
     logger.debug(f"Using confidence threshold: {threshold}")
 
     # Perform detection
@@ -184,6 +190,12 @@ async def list_backends():
     """
     backends = {}
     for backend_name in settings.AVAILABLE_BACKENDS:
+        if backend_name not in BACKEND_REGISTRY:
+            backends[backend_name] = {
+                "status": "unavailable",
+                "error": f"Backend '{backend_name}' dependencies not installed"
+            }
+            continue
         try:
             detector = get_backend(backend_name)
             backends[backend_name] = {
@@ -191,11 +203,12 @@ async def list_backends():
                 "model_info": detector.get_model_info()
             }
         except Exception as e:
+            logger.warning(f"Backend {backend_name} failed to initialize: {e}")
             backends[backend_name] = {
                 "status": "error",
                 "error": str(e)
             }
-    
+
     return {
         "default_backend": settings.DEFAULT_BACKEND,
         "backends": backends

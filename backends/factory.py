@@ -1,10 +1,15 @@
 from typing import Dict, Type
 
 from backends.base import DetectionBackend
-from backends.tflite.backend import TFLiteBackend
 from config import settings
 
-# Lazy imports for optional backends
+# Lazy imports for all optional backends
+try:
+    from backends.tflite.backend import TFLiteBackend
+    TFLITE_AVAILABLE = True
+except ImportError:
+    TFLITE_AVAILABLE = False
+
 try:
     from backends.onnx.backend import ONNXBackend
     ONNX_AVAILABLE = True
@@ -25,11 +30,11 @@ except ImportError:
 
 
 # Registry of available backends
-BACKEND_REGISTRY: Dict[str, Type[DetectionBackend]] = {
-    "tflite": TFLiteBackend,
-}
+BACKEND_REGISTRY: Dict[str, Type[DetectionBackend]] = {}
 
-# Add optional backends if available
+if TFLITE_AVAILABLE:
+    BACKEND_REGISTRY["tflite"] = TFLiteBackend
+
 if ONNX_AVAILABLE:
     BACKEND_REGISTRY["onnx"] = ONNXBackend
 
