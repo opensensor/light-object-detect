@@ -28,9 +28,19 @@ try:
 except ImportError:
     EDGETPU_AVAILABLE = False
 
+try:
+    from backends.moondream.backend import MoondreamBackend
+    MOONDREAM_AVAILABLE = True
+except ImportError:
+    MOONDREAM_AVAILABLE = False
+
 
 # Registry of available backends
 BACKEND_REGISTRY: Dict[str, Type[DetectionBackend]] = {}
+
+# Instance cache — avoids reloading heavy models (e.g. Moondream 3.85 GB) on
+# every request.
+_backend_instances: Dict[str, DetectionBackend] = {}
 
 if TFLITE_AVAILABLE:
     BACKEND_REGISTRY["tflite"] = TFLiteBackend
@@ -44,34 +54,40 @@ if OPENCV_AVAILABLE:
 if EDGETPU_AVAILABLE:
     BACKEND_REGISTRY["edgetpu"] = EdgeTPUBackend
 
+if MOONDREAM_AVAILABLE:
+    BACKEND_REGISTRY["moondream"] = MoondreamBackend
+
 
 def get_backend(backend_name: str) -> DetectionBackend:
     """
-    Get an instance of the specified detection backend.
-    
+    Get a (cached) instance of the specified detection backend.
+
     Args:
         backend_name: Name of the backend to instantiate
-        
+
     Returns:
         Instance of the requested backend
-        
+
     Raises:
         ValueError: If the backend is not available
     """
+    if backend_name in _backend_instances:
+        return _backend_instances[backend_name]
+
     if backend_name not in BACKEND_REGISTRY:
         raise ValueError(f"Backend '{backend_name}' not found. Available backends: {list(BACKEND_REGISTRY.keys())}")
-    
+
     backend_class = BACKEND_REGISTRY[backend_name]
-    
+
     # Initialize backend with appropriate settings
     if backend_name == "tflite":
-        return backend_class(
+        instance = backend_class(
             model_path=settings.TFLITE_MODEL_PATH,
             labels_path=settings.TFLITE_LABELS_PATH,
             confidence_threshold=settings.TFLITE_CONFIDENCE_THRESHOLD
         )
     elif backend_name == "onnx":
-        return backend_class(
+        instance = backend_class(
             model_path=settings.ONNX_MODEL_PATH,
             labels_path=settings.ONNX_LABELS_PATH,
             confidence_threshold=settings.ONNX_CONFIDENCE_THRESHOLD,
@@ -79,7 +95,7 @@ def get_backend(backend_name: str) -> DetectionBackend:
             model_type=settings.ONNX_MODEL_TYPE
         )
     elif backend_name == "opencv":
-        return backend_class(
+        instance = backend_class(
             model_path=settings.OPENCV_MODEL_PATH,
             config_path=settings.OPENCV_CONFIG_PATH,
             labels_path=settings.OPENCV_LABELS_PATH,
@@ -89,7 +105,7 @@ def get_backend(backend_name: str) -> DetectionBackend:
             input_size=settings.OPENCV_INPUT_SIZE
         )
     elif backend_name == "edgetpu":
-        return backend_class(
+        instance = backend_class(
             model_path=settings.EDGETPU_MODEL_PATH,
             labels_path=settings.EDGETPU_LABELS_PATH,
             confidence_threshold=settings.EDGETPU_CONFIDENCE_THRESHOLD,
@@ -97,9 +113,18 @@ def get_backend(backend_name: str) -> DetectionBackend:
             model_type=settings.EDGETPU_MODEL_TYPE,
             iou_threshold=settings.EDGETPU_IOU_THRESHOLD
         )
+    elif backend_name == "moondream":
+        instance = backend_class(
+            model_name=settings.MOONDREAM_MODEL_NAME,
+            revision=settings.MOONDREAM_REVISION,
+            device=settings.MOONDREAM_DEVICE,
+            default_detect_classes=settings.MOONDREAM_DEFAULT_DETECT_CLASSES,
+        )
+    else:
+        instance = backend_class()
 
-    # Default initialization for other backends
-    return backend_class()
+    _backend_instances[backend_name] = instance
+    return instance
 
 
 def register_backend(name: str, backend_class: Type[DetectionBackend]) -> None:

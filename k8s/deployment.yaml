@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: light-object-detect
+  namespace: light-object-detect
+  labels:
+    app.kubernetes.io/name: light-object-detect
+    app.kubernetes.io/part-of: opensensor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: light-object-detect
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: light-object-detect
+        app.kubernetes.io/part-of: opensensor
+    spec:
+      imagePullSecrets:
+        - name: whitewhale
+      containers:
+        - name: light-object-detect
+          image: ghcr.io/opensensor/light-object-detect:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: ONNX_MODEL_PATH
+              value: "backends/onnx/models/yolo26n.onnx"
+            - name: ONNX_MODEL_TYPE
+              value: "yolo26"
+            # HuggingFace cache directory — backed by PVC so models
+            # survive pod restarts and don't re-download.
+            - name: HF_HOME
+              value: "/cache/huggingface"
+            # Moondream settings
+            - name: MOONDREAM_MODEL_NAME
+              value: "vikhyatk/moondream2"
+            - name: MOONDREAM_DEVICE
+              value: "cpu"
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /cache/huggingface
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          # Moondream model download + load can take 2-3 minutes on
+          # first start (cold cache).  After that, startup is ~30-60s.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30        # up to 5 minutes for cold start
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: huggingface-cache
+

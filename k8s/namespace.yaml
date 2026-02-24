@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: light-object-detect
+  labels:
+    app.kubernetes.io/part-of: opensensor
+

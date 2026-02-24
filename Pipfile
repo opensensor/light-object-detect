@@ -17,6 +17,9 @@ onnxruntime = "==1.23.2"
 opencv-python = "*"
 scipy = "*"
 shapely = "*"
+transformers = ">=4.51.1,<5.0"
+torch = ">=2.7.0"
+accelerate = ">=1.10.0"
 
 [dev-packages]
 ultralytics = "*"

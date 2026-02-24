@@ -1,15 +1,15 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Union, Tuple
 
 
 class BoundingBox(BaseModel):
     """Bounding box coordinates for a detected object."""
-    
+
     x_min: float = Field(..., description="Normalized left coordinate (0-1)")
     y_min: float = Field(..., description="Normalized top coordinate (0-1)")
     x_max: float = Field(..., description="Normalized right coordinate (0-1)")
     y_max: float = Field(..., description="Normalized bottom coordinate (0-1)")
-    
+
     def to_pixel_coords(self, width: int, height: int) -> Dict[str, int]:
         """Convert normalized coordinates to pixel coordinates."""
         return {
@@ -48,14 +48,14 @@ class DetectionResult(BaseModel):
 
 class ImageResponse(BaseModel):
     """Image data response model."""
-    
+
     content_type: str = Field(..., description="Image content type (e.g., 'image/jpeg')")
     base64_data: str = Field(..., description="Base64 encoded image data")
 
 
 class DetectionResponse(BaseModel):
     """Response model for object detection API."""
-    
+
     backend: str = Field(..., description="Backend used for detection")
     filename: str = Field(..., description="Original filename")
     detections: List[DetectionResult] = Field(default_factory=list, description="List of detected objects")
@@ -63,7 +63,7 @@ class DetectionResponse(BaseModel):
     image_width: int = Field(..., description="Original image width in pixels")
     image_height: int = Field(..., description="Original image height in pixels")
     image: Optional[ImageResponse] = Field(None, description="Image with bounding boxes (if requested)")
-    
+
     class Config:
         schema_extra = {
             "example": {
@@ -87,3 +87,27 @@ class DetectionResponse(BaseModel):
                 "image": None
             }
         }
+
+
+
+class DescribeResponse(BaseModel):
+    """Response model for image description/captioning."""
+
+    backend: str = Field(..., description="Backend used for description")
+    filename: str = Field(..., description="Original filename")
+    description: str = Field(..., description="Natural language description of the image")
+    process_time_ms: int = Field(..., description="Processing time in milliseconds")
+    image_width: int = Field(..., description="Original image width in pixels")
+    image_height: int = Field(..., description="Original image height in pixels")
+
+
+class QueryResponse(BaseModel):
+    """Response model for visual question answering."""
+
+    backend: str = Field(..., description="Backend used for query")
+    filename: str = Field(..., description="Original filename")
+    question: str = Field(..., description="The question that was asked")
+    answer: str = Field(..., description="Answer to the question about the image")
+    process_time_ms: int = Field(..., description="Processing time in milliseconds")
+    image_width: int = Field(..., description="Original image width in pixels")
+    image_height: int = Field(..., description="Original image height in pixels")

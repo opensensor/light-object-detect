@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: light-object-detect
+  namespace: light-object-detect
+  labels:
+    app.kubernetes.io/name: light-object-detect
+    app.kubernetes.io/part-of: opensensor
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: light-object-detect
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+

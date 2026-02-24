@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Backend settings
     DEFAULT_BACKEND: str = "onnx"
-    AVAILABLE_BACKENDS: List[str] = ["onnx", "tflite", "opencv", "edgetpu"]
+    AVAILABLE_BACKENDS: List[str] = ["onnx", "tflite", "opencv", "edgetpu", "moondream"]
 
     # TFLite settings
     TFLITE_MODEL_PATH: str = "backends/tflite/models/ssd_mobilenet_v1.tflite"
@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     EDGETPU_MODEL_TYPE: str = "ssd"  # 'ssd' or 'yolo'
     EDGETPU_IOU_THRESHOLD: float = 0.4  # For YOLO models only
     
+    # Moondream settings (local HuggingFace Transformers inference)
+    MOONDREAM_MODEL_NAME: str = "vikhyatk/moondream2"
+    MOONDREAM_REVISION: Optional[str] = None  # pin a specific model revision
+    MOONDREAM_DEVICE: str = "cpu"  # "cpu", "cuda", "mps"
+    MOONDREAM_DEFAULT_DETECT_CLASSES: List[str] = [
+        "person", "car", "truck", "bicycle", "motorcycle", "bus",
+        "dog", "cat", "bird", "horse",
+    ]
+
     # Image settings
     MAX_IMAGE_SIZE: int = 1024  # Maximum dimension (width or height) in pixels
     SUPPORTED_FORMATS: List[str] = ["jpg", "jpeg", "png"]

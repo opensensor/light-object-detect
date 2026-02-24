@@ -41,12 +41,44 @@ class DetectionBackend(ABC):
     def draw_detections(self, image: Image.Image, detections: List[DetectionResult]) -> Image.Image:
         """
         Draw bounding boxes and labels on the image.
-        
+
         Args:
             image: PIL Image to draw on
             detections: List of DetectionResult objects
-            
+
         Returns:
             PIL Image with bounding boxes and labels drawn
         """
         pass
+
+    def describe(self, image: Image.Image, length: str = "normal") -> str:
+        """
+        Generate a natural language description of the image.
+
+        Args:
+            image: PIL Image to describe
+            length: Caption length - 'short' or 'normal'
+
+        Returns:
+            Natural language description string
+
+        Raises:
+            NotImplementedError: If this backend does not support image description
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} does not support image description")
+
+    def query(self, image: Image.Image, question: str) -> str:
+        """
+        Answer a free-form question about the image.
+
+        Args:
+            image: PIL Image to query
+            question: Natural language question about the image
+
+        Returns:
+            Answer string
+
+        Raises:
+            NotImplementedError: If this backend does not support visual Q&A
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} does not support visual Q&A")

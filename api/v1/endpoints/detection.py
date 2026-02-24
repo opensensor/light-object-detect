@@ -6,7 +6,7 @@ from PIL import Image
 import time
 import logging
 
-from models.detection import DetectionResponse, DetectionResult, ImageResponse
+from models.detection import DetectionResponse, DetectionResult, ImageResponse, DescribeResponse, QueryResponse
 from models.zone import ZoneConfiguration
 from backends.factory import get_backend, BACKEND_REGISTRY
 from utils.image import validate_image, preprocess_image, image_to_bytes
@@ -108,6 +108,11 @@ async def detect_objects(
             for det in detections:
                 class_counts[det.label] = class_counts.get(det.label, 0) + 1
             logger.info(f"Detected objects: {dict(class_counts)}")
+            for det in detections:
+                b = det.bounding_box
+                logger.info(f"  → {det.label} ({det.confidence:.2f}): [{b.x_min:.3f},{b.y_min:.3f},{b.x_max:.3f},{b.y_max:.3f}]")
+        else:
+            logger.info("No objects detected")
     except Exception as e:
         logger.error(f"Detection failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Detection error: {str(e)}")
@@ -181,6 +186,133 @@ async def detect_objects(
             logger.error(f"Error drawing bounding boxes: {str(e)}", exc_info=True)
 
     return response
+
+
+@router.post("/describe", response_model=DescribeResponse)
+async def describe_image(
+    file: UploadFile = File(...),
+    backend: str = Query("moondream", description="Backend to use for description"),
+    length: str = Query("normal", description="Caption length: 'short', 'normal', or 'long'"),
+    return_image: bool = Query(False, description="Ignored for describe endpoint (accepted for compatibility)"),
+):
+    """
+    Generate a natural language description of an uploaded image.
+
+    - **file**: Image file to describe
+    - **backend**: Backend to use (must support description, e.g. moondream)
+    - **length**: Caption length - 'short', 'normal', or 'long'
+    """
+    logger.info(f"Describe request: backend={backend}, length={length}, filename={file.filename}")
+
+    if backend not in settings.AVAILABLE_BACKENDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Backend '{backend}' not available. Available backends: {settings.AVAILABLE_BACKENDS}"
+        )
+
+    try:
+        detector = get_backend(backend)
+    except Exception as e:
+        logger.error(f"Failed to initialize backend {backend}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Backend initialization error: {str(e)}")
+
+    # Read and validate image
+    try:
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents))
+        validate_image(image, file.filename)
+        processed_image = preprocess_image(image)
+    except Exception as e:
+        logger.error(f"Image validation/processing failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid image: {str(e)}")
+
+    start_time = time.time()
+    try:
+        description = detector.describe(processed_image, length=length)
+        process_time = time.time() - start_time
+        logger.info(f"Describe completed in {process_time*1000:.1f}ms")
+        logger.info(f"Description result: {description}")
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Backend '{backend}' does not support image description"
+        )
+    except Exception as e:
+        logger.error(f"Describe failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Description error: {str(e)}")
+
+    return DescribeResponse(
+        backend=backend,
+        filename=file.filename,
+        description=description,
+        process_time_ms=int(process_time * 1000),
+        image_width=image.width,
+        image_height=image.height,
+    )
+
+
+@router.post("/query", response_model=QueryResponse)
+async def query_image(
+    file: UploadFile = File(...),
+    question: str = Query(..., description="Question to ask about the image"),
+    backend: str = Query("moondream", description="Backend to use for visual Q&A"),
+    return_image: bool = Query(False, description="Ignored for query endpoint (accepted for compatibility)"),
+):
+    """
+    Ask a natural language question about an uploaded image.
+
+    - **file**: Image file to query
+    - **question**: Natural language question about the image
+    - **backend**: Backend to use (must support visual Q&A, e.g. moondream)
+    """
+    logger.info(f"Query request: backend={backend}, question={question!r}, filename={file.filename}")
+
+    if backend not in settings.AVAILABLE_BACKENDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Backend '{backend}' not available. Available backends: {settings.AVAILABLE_BACKENDS}"
+        )
+
+    try:
+        detector = get_backend(backend)
+    except Exception as e:
+        logger.error(f"Failed to initialize backend {backend}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Backend initialization error: {str(e)}")
+
+    # Read and validate image
+    try:
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents))
+        validate_image(image, file.filename)
+        processed_image = preprocess_image(image)
+    except Exception as e:
+        logger.error(f"Image validation/processing failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid image: {str(e)}")
+
+    start_time = time.time()
+    try:
+        answer = detector.query(processed_image, question=question)
+        process_time = time.time() - start_time
+        logger.info(f"Query completed in {process_time*1000:.1f}ms")
+        logger.info(f"Query answer: {answer}")
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Backend '{backend}' does not support visual Q&A"
+        )
+    except Exception as e:
+        logger.error(f"Query failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Query error: {str(e)}")
+
+    return QueryResponse(
+        backend=backend,
+        filename=file.filename,
+        question=question,
+        answer=answer,
+        process_time_ms=int(process_time * 1000),
+        image_width=image.width,
+        image_height=image.height,
+    )
 
 
 @router.get("/backends", response_model=Dict[str, Any])

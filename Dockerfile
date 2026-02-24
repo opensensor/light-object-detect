@@ -36,6 +36,16 @@ RUN python -m pip install --upgrade pip \
 ARG INSTALL_TENSORFLOW=0
 RUN if [ "$INSTALL_TENSORFLOW" = "1" ]; then python -m pip install tensorflow; fi
 
+# Optional: install moondream (torch + transformers) for VLM backend
+# Usage: docker build --build-arg INSTALL_MOONDREAM=1 ...
+ARG INSTALL_MOONDREAM=0
+RUN if [ "$INSTALL_MOONDREAM" = "1" ]; then \
+    python -m pip install \
+        "transformers>=4.51.1,<5.0" \
+        "torch>=2.7.0" \
+        "accelerate>=1.10.0"; \
+    fi
+
 COPY . .
 
 # Optionally bake the TFLite model (only useful if tensorflow is installed)
