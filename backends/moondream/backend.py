@@ -44,7 +44,7 @@ class MoondreamBackend(DetectionBackend):
 
         load_kwargs: Dict[str, Any] = {
             "trust_remote_code": True,
-            "torch_dtype": dtype,
+            "dtype": dtype,
             "device_map": device,
         }
         if revision:
