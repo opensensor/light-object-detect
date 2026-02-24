@@ -11,11 +11,10 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: light-object-detect
+  # Recreate strategy required: the HuggingFace cache PVC is
+  # ReadWriteOnce, so only one pod can mount it at a time.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   template:
     metadata:
       labels:
