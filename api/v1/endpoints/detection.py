@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends, Body
 from typing import List, Optional, Dict, Any
+import asyncio
 import io
 import base64
 from PIL import Image
@@ -95,10 +96,13 @@ async def detect_objects(
     threshold = confidence_threshold or default_threshold
     logger.debug(f"Using confidence threshold: {threshold}")
 
-    # Perform detection
+    # Perform detection (run in thread pool to avoid blocking the event loop
+    # so health probes can still respond during long-running inference).
     start_time = time.time()
     try:
-        detections = detector.detect(processed_image, confidence_threshold=threshold)
+        detections = await asyncio.to_thread(
+            detector.detect, processed_image, confidence_threshold=threshold
+        )
         detection_time = time.time() - start_time
         logger.info(f"Detection completed: {len(detections)} objects found in {detection_time*1000:.1f}ms")
 
@@ -228,7 +232,9 @@ async def describe_image(
 
     start_time = time.time()
     try:
-        description = detector.describe(processed_image, length=length)
+        description = await asyncio.to_thread(
+            detector.describe, processed_image, length=length
+        )
         process_time = time.time() - start_time
         logger.info(f"Describe completed in {process_time*1000:.1f}ms")
         logger.info(f"Description result: {description}")
@@ -291,7 +297,9 @@ async def query_image(
 
     start_time = time.time()
     try:
-        answer = detector.query(processed_image, question=question)
+        answer = await asyncio.to_thread(
+            detector.query, processed_image, question=question
+        )
         process_time = time.time() - start_time
         logger.info(f"Query completed in {process_time*1000:.1f}ms")
         logger.info(f"Query answer: {answer}")
