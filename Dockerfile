@@ -39,6 +39,17 @@ RUN python -m pip install --upgrade pip \
         scipy \
         shapely
 
+# Optional: Intel GPU userspace driver, required for OpenVINO's GPU device.
+# The OpenVINO wheel ships the GPU plugin but still needs the host OpenCL
+# driver to see /dev/dri; without it OpenVINO silently falls back to CPU.
+# Usage: docker build --build-arg INSTALL_INTEL_GPU=1 ...
+ARG INSTALL_INTEL_GPU=0
+RUN if [ "$INSTALL_INTEL_GPU" = "1" ]; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends intel-opencl-icd \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 # Optional: install tensorflow for tflite backend support
 # Usage: docker build --build-arg INSTALL_TENSORFLOW=1 ...
 ARG INSTALL_TENSORFLOW=0

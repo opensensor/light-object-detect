@@ -1,5 +1,6 @@
 .git
 .github
+.claude
 __pycache__
 *.pyc
 *.pyo
