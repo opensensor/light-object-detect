@@ -4,6 +4,7 @@ Execution provider selection for the ONNX backend.
 Kept free of the ``onnxruntime`` import so the selection logic can be exercised
 without an ONNX Runtime build installed.
 """
+import glob
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -81,12 +82,11 @@ def openvino_runtime_info() -> Dict[str, Any]:
     Returns:
         Dictionary with available_devices and their full names, or an error key
     """
-    try:
-        import openvino as ov
-    except ImportError as exc:
-        return {"error": f"openvino package not importable: {exc}"}
+    info: Dict[str, Any] = {}
 
     try:
+        import openvino as ov
+
         core = ov.Core()
         devices = list(core.available_devices)
         names = {}
@@ -95,9 +95,22 @@ def openvino_runtime_info() -> Dict[str, Any]:
                 names[device] = core.get_property(device, "FULL_DEVICE_NAME")
             except Exception:  # a device can refuse the property
                 pass
-        return {"available_devices": devices, "device_names": names}
+        info["available_devices"] = devices
+        info["device_names"] = names
+    except ImportError as exc:
+        # The onnxruntime-openvino wheel bundles the OpenVINO C++ runtime but
+        # not always the Python bindings, so the execution provider can be fully
+        # working while this import fails. Fall through to the evidence below.
+        info["error"] = f"openvino package not importable: {exc}"
     except Exception as exc:
-        return {"error": f"openvino device query failed: {exc}"}
+        info["error"] = f"openvino device query failed: {exc}"
+
+    # Recorded either way: with no Python bindings this is the only signal there
+    # is, and it covers the two things that actually go wrong — the OpenCL
+    # driver missing from the image, and /dev/dri missing from the container.
+    info["render_nodes"] = sorted(glob.glob("/dev/dri/render*"))
+    info["opencl_vendors"] = sorted(glob.glob("/etc/OpenCL/vendors/*.icd"))
+    return info
 
 
 def resolve_providers(requested, available: Sequence[str],

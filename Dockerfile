@@ -50,7 +50,7 @@ RUN python -m pip install --upgrade pip \
 ARG INSTALL_INTEL_GPU=0
 RUN if [ "$INSTALL_INTEL_GPU" = "1" ]; then \
         apt-get update \
-        && { apt-get install -y --no-install-recommends intel-opencl-icd \
+        && { apt-get install -y --no-install-recommends intel-opencl-icd clinfo \
              || { echo "ERROR: intel-opencl-icd is not in this base image's repos."; \
                   echo "Debian trixie dropped it — build with"; \
                   echo "  --build-arg BASE_IMAGE=python:3.11-slim-bookworm"; \

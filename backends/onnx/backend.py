@@ -104,20 +104,45 @@ class ONNXBackend(DetectionBackend):
             requested_device: The configured ONNX_OPENVINO_DEVICE_TYPE
         """
         info = self.openvino_info or {}
+        wanted = (requested_device or "").upper()
+        wants_gpu = "GPU" in wanted or wanted == "AUTO"
+
+        # Whether the OpenCL stack could possibly reach an Intel GPU at all.
+        # Both halves have to be present: the driver in the image, and the
+        # device node in the container.
+        render_nodes = info.get("render_nodes", [])
+        opencl_vendors = info.get("opencl_vendors", [])
+        if wants_gpu and not render_nodes:
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no /dev/dri/render* node is "
+                "present — pass the device into the container "
+                "(devices: - /dev/dri/renderD128:/dev/dri/renderD128)",
+                requested_device
+            )
+        if wants_gpu and not opencl_vendors:
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no OpenCL ICD is installed in "
+                "/etc/OpenCL/vendors — rebuild the image with "
+                "--build-arg INSTALL_INTEL_GPU=1",
+                requested_device
+            )
+
         if "error" in info:
-            logger.warning("ONNX: could not query OpenVINO devices: %s", info["error"])
+            logger.info(
+                "ONNX: OpenVINO device list unavailable (%s); render nodes=%s, "
+                "OpenCL ICDs=%s. Run 'clinfo -l' in the container to confirm "
+                "whether the GPU is reachable.",
+                info["error"], render_nodes, opencl_vendors
+            )
             return
 
         devices = info.get("available_devices", [])
         logger.info("ONNX: OpenVINO devices visible: %s", devices)
 
-        wanted = (requested_device or "").upper()
-        if "GPU" not in devices and ("GPU" in wanted or wanted == "AUTO"):
+        if wants_gpu and "GPU" not in devices:
             logger.warning(
                 "ONNX: OpenVINO device_type=%s but no GPU is visible (devices: %s), "
-                "so inference runs on the CPU device. The image needs "
-                "intel-opencl-icd (build with INSTALL_INTEL_GPU=1) and the "
-                "container needs /dev/dri passed through.",
+                "so inference runs on the CPU device.",
                 requested_device, devices
             )
         if "NPU" in wanted and "NPU" not in devices:
