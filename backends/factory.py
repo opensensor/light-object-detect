@@ -92,7 +92,12 @@ def get_backend(backend_name: str) -> DetectionBackend:
             labels_path=settings.ONNX_LABELS_PATH,
             confidence_threshold=settings.ONNX_CONFIDENCE_THRESHOLD,
             iou_threshold=settings.ONNX_IOU_THRESHOLD,
-            model_type=settings.ONNX_MODEL_TYPE
+            model_type=settings.ONNX_MODEL_TYPE,
+            execution_providers=settings.ONNX_EXECUTION_PROVIDERS,
+            openvino_device_type=settings.ONNX_OPENVINO_DEVICE_TYPE,
+            openvino_precision=settings.ONNX_OPENVINO_PRECISION,
+            openvino_num_threads=settings.ONNX_OPENVINO_NUM_THREADS,
+            openvino_cache_dir=settings.ONNX_OPENVINO_CACHE_DIR
         )
     elif backend_name == "opencv":
         instance = backend_class(

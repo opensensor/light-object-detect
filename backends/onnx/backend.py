@@ -1,18 +1,31 @@
 import os
+import logging
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 import onnxruntime as ort
 
 from backends.base import DetectionBackend
+from backends.onnx.providers import (
+    CPU_PROVIDER,
+    build_openvino_options,
+    resolve_providers,
+)
 from models.detection import DetectionResult, BoundingBox
+
+logger = logging.getLogger(__name__)
 
 
 class ONNXBackend(DetectionBackend):
     """ONNX Runtime detection backend supporting YOLO and other ONNX models."""
-    
+
     def __init__(self, model_path: str, labels_path: str, confidence_threshold: float = 0.5,
-                 iou_threshold: float = 0.45, model_type: str = "yolov8"):
+                 iou_threshold: float = 0.45, model_type: str = "yolov8",
+                 execution_providers: Any = "cuda,openvino,cpu",
+                 openvino_device_type: Optional[str] = "AUTO",
+                 openvino_precision: Optional[str] = None,
+                 openvino_num_threads: Optional[int] = None,
+                 openvino_cache_dir: Optional[str] = None):
         """
         Initialize the ONNX detection backend.
 
@@ -22,13 +35,22 @@ class ONNXBackend(DetectionBackend):
             confidence_threshold: Default confidence threshold
             iou_threshold: IoU threshold for NMS
             model_type: Type of model (yolov8, yolo11, yolo26, yolov5, yolox, etc.)
+            execution_providers: Preference order for ONNX Runtime execution
+                providers, as a comma-separated string or a list. Providers
+                missing from the installed wheel are skipped; CPU is always the
+                final fallback.
+            openvino_device_type: OpenVINO device (CPU, GPU, NPU, AUTO, or a
+                HETERO/MULTI/AUTO device list)
+            openvino_precision: OpenVINO inference precision (FP32, FP16, ACCURACY)
+            openvino_num_threads: Inference threads for the OpenVINO CPU device
+            openvino_cache_dir: Directory for OpenVINO compiled model blobs
         """
         self.model_path = model_path
         self.labels_path = labels_path
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
         self.model_type = model_type.lower()
-        
+
         # Check if model file exists
         if not os.path.exists(model_path):
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -36,15 +58,24 @@ class ONNXBackend(DetectionBackend):
                 f"ONNX model not found at {model_path}. "
                 f"Please download a YOLOv8 ONNX model and place it at this location."
             )
-        
+
         # Initialize ONNX Runtime session
-        providers = ['CPUExecutionProvider']
-        # Try to use CUDA if available
-        if 'CUDAExecutionProvider' in ort.get_available_providers():
-            providers.insert(0, 'CUDAExecutionProvider')
-        
-        self.session = ort.InferenceSession(model_path, providers=providers)
-        
+        if openvino_cache_dir:
+            os.makedirs(openvino_cache_dir, exist_ok=True)
+        openvino_options = build_openvino_options(
+            device_type=openvino_device_type,
+            precision=openvino_precision,
+            num_threads=openvino_num_threads,
+            cache_dir=openvino_cache_dir,
+        )
+        providers, provider_options = resolve_providers(
+            execution_providers, ort.get_available_providers(), openvino_options
+        )
+
+        self.session = self._create_session(model_path, providers, provider_options)
+        self.providers = self.session.get_providers()
+        logger.info("ONNX: session for %s using providers %s", model_path, self.providers)
+
         # Get model input/output details
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [output.name for output in self.session.get_outputs()]
@@ -56,7 +87,40 @@ class ONNXBackend(DetectionBackend):
         
         # Load labels
         self.labels = self._load_labels(labels_path)
-    
+
+    def _create_session(self, model_path: str, providers: List[str],
+                        provider_options: List[Dict[str, Any]]) -> "ort.InferenceSession":
+        """
+        Create the inference session, falling back to CPU if the accelerator refuses.
+
+        An accelerator provider can fail at session-creation time rather than at
+        import time — OpenVINO in particular raises when a model cannot be
+        compiled for the requested device (common when targeting an NPU). Falling
+        back keeps the backend serving instead of taking the whole API down.
+
+        Args:
+            model_path: Path to the ONNX model file
+            providers: Execution providers in preference order
+            provider_options: Per-provider options, parallel to providers
+
+        Returns:
+            An ONNX Runtime InferenceSession
+        """
+        try:
+            return ort.InferenceSession(
+                model_path, providers=providers, provider_options=provider_options
+            )
+        except Exception as exc:
+            if providers == [CPU_PROVIDER]:
+                raise
+            logger.warning(
+                "ONNX: could not create a session with providers %s (%s); "
+                "falling back to %s", providers, exc, CPU_PROVIDER
+            )
+            return ort.InferenceSession(
+                model_path, providers=[CPU_PROVIDER], provider_options=[{}]
+            )
+
     def _load_labels(self, labels_path: str) -> List[str]:
         """
         Load labels from file.

@@ -13,6 +13,9 @@ pillow = "*"
 exceptiongroup = "*"
 numpy = "*"
 tensorflow = "*"
+# Swap for onnxruntime-openvino (Intel CPU/iGPU/NPU) or onnxruntime-gpu (CUDA)
+# to enable those execution providers. They replace this wheel; do not install
+# more than one. See BACKEND_CONFIGURATION.md.
 onnxruntime = "==1.23.2"
 opencv-python = "*"
 scipy = "*"

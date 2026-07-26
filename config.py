@@ -25,6 +25,20 @@ class Settings(BaseSettings):
     ONNX_IOU_THRESHOLD: float = 0.45
     ONNX_MODEL_TYPE: str = "yolo11"
 
+    # Execution provider preference order, comma-separated. Accepts the short
+    # aliases 'cuda', 'openvino' and 'cpu' or full ONNX Runtime provider names.
+    # Providers missing from the installed wheel are skipped, so one value works
+    # across CUDA, OpenVINO and plain-CPU hosts; CPU is always the last resort.
+    ONNX_EXECUTION_PROVIDERS: str = "cuda,openvino,cpu"
+
+    # OpenVINO execution provider options. Only used when 'openvino' is selected
+    # and the onnxruntime-openvino wheel is installed — see BACKEND_CONFIGURATION.md.
+    # Unset values fall through to OpenVINO's own per-device defaults.
+    ONNX_OPENVINO_DEVICE_TYPE: str = "AUTO"  # CPU, GPU, NPU, AUTO, or HETERO/MULTI/AUTO:<devices>
+    ONNX_OPENVINO_PRECISION: Optional[str] = None  # FP32, FP16, ACCURACY
+    ONNX_OPENVINO_NUM_THREADS: Optional[int] = None
+    ONNX_OPENVINO_CACHE_DIR: Optional[str] = None  # caches compiled blobs; big startup win on GPU/NPU
+
     # OpenCV DNN settings
     OPENCV_MODEL_PATH: str = "backends/opencv/models/yolov4-tiny.weights"
     OPENCV_CONFIG_PATH: str = "backends/opencv/models/yolov4-tiny.cfg"
