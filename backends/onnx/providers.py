@@ -68,6 +68,38 @@ def build_openvino_options(device_type: Optional[str] = None,
     return options
 
 
+def openvino_runtime_info() -> Dict[str, Any]:
+    """
+    Ask the OpenVINO runtime which devices it can actually see.
+
+    ``OpenVINOExecutionProvider`` appearing in the provider list only says
+    OpenVINO is in use, not which device it landed on. A missing OpenCL driver
+    or an un-passed /dev/dri shows up as a perfectly healthy-looking provider
+    list running entirely on the CPU device, so the device inventory is the
+    only way to tell the two apart from outside the container.
+
+    Returns:
+        Dictionary with available_devices and their full names, or an error key
+    """
+    try:
+        import openvino as ov
+    except ImportError as exc:
+        return {"error": f"openvino package not importable: {exc}"}
+
+    try:
+        core = ov.Core()
+        devices = list(core.available_devices)
+        names = {}
+        for device in devices:
+            try:
+                names[device] = core.get_property(device, "FULL_DEVICE_NAME")
+            except Exception:  # a device can refuse the property
+                pass
+        return {"available_devices": devices, "device_names": names}
+    except Exception as exc:
+        return {"error": f"openvino device query failed: {exc}"}
+
+
 def resolve_providers(requested, available: Sequence[str],
                       openvino_options: Optional[Dict[str, Any]] = None
                       ) -> Tuple[List[str], List[Dict[str, Any]]]:

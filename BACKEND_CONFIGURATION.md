@@ -339,10 +339,24 @@ docker build \
 message telling you so. Without the driver the container still runs, but
 OpenVINO sees no GPU and silently uses the CPU device.
 
-Startup logs which providers the session actually got:
+Startup logs which providers the session actually got, and which OpenVINO
+devices it can see:
 ```
 ONNX: session for backends/onnx/models/yolo11n.onnx using providers ['OpenVINOExecutionProvider', 'CPUExecutionProvider']
+ONNX: OpenVINO devices visible: ['CPU', 'GPU']
 ```
+
+The same detail is available at runtime from `GET /api/v1/backends`, under
+`backends.onnx.model_info.openvino`:
+
+```bash
+curl -s http://localhost:8000/api/v1/backends | jq '.backends.onnx.model_info | {providers, openvino}'
+```
+
+**A provider list containing `OpenVINOExecutionProvider` does not mean the GPU
+is being used.** If `available_devices` is `["CPU"]`, OpenVINO is running on
+its CPU device — faster than the plain CPU provider, but not the iGPU. The
+backend logs a warning naming that case at startup.
 
 If OpenVINO cannot compile the model for the requested device — most common when
 pinning `NPU` — the backend logs a warning and falls back to CPU rather than
