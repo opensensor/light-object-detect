@@ -276,6 +276,63 @@ Check if CUDA is available:
 python3 -c "import onnxruntime as ort; print(ort.get_available_providers())"
 ```
 
+### OpenVINO Acceleration for ONNX (Intel CPU / iGPU / NPU)
+
+OpenVINO runs the same ONNX model on Intel hardware — including the integrated
+GPU and the NPU found on Core Ultra parts — and is typically several times
+faster than the plain CPU provider on the same machine.
+
+Install ONNX Runtime with OpenVINO support. This is a **drop-in replacement**
+for `onnxruntime`, not an addition — having both installed breaks the import:
+
+```bash
+pip uninstall -y onnxruntime onnxruntime-gpu
+pip install onnxruntime-openvino
+```
+
+Confirm the provider registered:
+```bash
+python3 -c "import onnxruntime as ort; print(ort.get_available_providers())"
+# expect 'OpenVINOExecutionProvider' in the list
+```
+
+Configure it in `.env`:
+
+```bash
+# Preference order. Providers missing from the installed wheel are skipped,
+# so this same value is safe on a CUDA box and on a plain-CPU box.
+ONNX_EXECUTION_PROVIDERS=openvino,cpu
+
+# AUTO lets OpenVINO pick the best device it can see. Pin it with CPU, GPU or
+# NPU, or spread work with a device list such as MULTI:GPU,CPU.
+ONNX_OPENVINO_DEVICE_TYPE=AUTO
+
+# Optional tuning
+#ONNX_OPENVINO_PRECISION=FP16          # FP32, FP16 or ACCURACY
+#ONNX_OPENVINO_NUM_THREADS=4           # CPU device only
+#ONNX_OPENVINO_CACHE_DIR=/tmp/ov_cache # caches compiled blobs
+```
+
+Set `ONNX_OPENVINO_CACHE_DIR` if you target GPU or NPU. The first session
+compiles the model for the device, which can take tens of seconds; the cache
+turns every subsequent start into a load. Point it at a persistent volume in
+Docker or the cache is rebuilt on every container start.
+
+**Device access.** The CPU device needs nothing extra. The iGPU additionally
+needs `intel-opencl-icd` on the host and `--device /dev/dri` passed into the
+container; the NPU needs the `intel-driver-compiler-npu` / `intel-level-zero-npu`
+packages and `--device /dev/accel`.
+
+Startup logs which providers the session actually got:
+```
+ONNX: session for backends/onnx/models/yolo11n.onnx using providers ['OpenVINOExecutionProvider', 'CPUExecutionProvider']
+```
+
+If OpenVINO cannot compile the model for the requested device — most common when
+pinning `NPU` — the backend logs a warning and falls back to CPU rather than
+failing the whole API. Watch for that warning if throughput looks unchanged
+after switching.
+
 ### Custom Confidence Thresholds
 
 You can set different confidence thresholds per backend in the `.env` file:
@@ -295,7 +352,7 @@ curl -X POST 'http://localhost:9001/api/v1/detect?backend=tflite&confidence_thre
 ## 9. Summary
 
 - **TFLite**: Best for embedded systems (Raspberry Pi, low-power devices)
-- **ONNX**: Best for servers with GPU acceleration
+- **ONNX**: Best for servers with GPU acceleration, and for Intel hardware via OpenVINO
 - **OpenCV**: Good general-purpose option for CPU-only systems
 
 Choose the backend that best fits your hardware and accuracy requirements!

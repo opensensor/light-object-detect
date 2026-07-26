@@ -25,6 +25,14 @@ RUN apt-get update \
     fi \
     && rm -rf /var/lib/apt/lists/*
 
+# Which ONNX Runtime wheel to install. These are mutually exclusive drop-in
+# replacements for each other, so pick exactly one:
+#   onnxruntime          CPU only (default)
+#   onnxruntime-openvino Intel CPU / iGPU / NPU via the OpenVINO provider
+#   onnxruntime-gpu      NVIDIA CUDA
+# Usage: docker build --build-arg ONNXRUNTIME_PACKAGE=onnxruntime-openvino ...
+ARG ONNXRUNTIME_PACKAGE=onnxruntime
+
 # Core Python deps (ONNX is now the default backend)
 COPY Pipfile Pipfile.lock ./
 RUN python -m pip install --upgrade pip \
@@ -37,7 +45,7 @@ RUN python -m pip install --upgrade pip \
         pillow \
         exceptiongroup \
         "numpy<2.0" \
-        onnxruntime \
+        "$ONNXRUNTIME_PACKAGE" \
         opencv-python \
         scipy \
         shapely

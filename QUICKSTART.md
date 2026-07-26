@@ -302,9 +302,12 @@ sqlite3 /var/lib/lightnvr/lightnvr.db \
 ### Optimization
 
 1. **Use CUDA**: Install `onnxruntime-gpu` for GPU acceleration
-2. **Adjust confidence threshold**: Higher = fewer false positives
-3. **Use zones**: Reduce processing by focusing on specific areas
-4. **Enable tracking**: Reduces false positives with temporal consistency
+2. **Use OpenVINO on Intel hardware**: Install `onnxruntime-openvino` and set
+   `ONNX_EXECUTION_PROVIDERS=openvino,cpu` to reach the Intel CPU, iGPU or NPU
+   (see BACKEND_CONFIGURATION.md)
+3. **Adjust confidence threshold**: Higher = fewer false positives
+4. **Use zones**: Reduce processing by focusing on specific areas
+5. **Enable tracking**: Reduces false positives with temporal consistency
 
 ## Troubleshooting
 
