@@ -1,4 +1,8 @@
-FROM python:3.11-slim
+# Pinned to a specific Debian release rather than the floating python:3.11-slim
+# tag, which now resolves to trixie. Trixie dropped intel-opencl-icd, so the
+# INSTALL_INTEL_GPU build below cannot work there.
+ARG BASE_IMAGE=python:3.11-slim-bookworm
+FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -46,7 +50,11 @@ RUN python -m pip install --upgrade pip \
 ARG INSTALL_INTEL_GPU=0
 RUN if [ "$INSTALL_INTEL_GPU" = "1" ]; then \
         apt-get update \
-        && apt-get install -y --no-install-recommends intel-opencl-icd \
+        && { apt-get install -y --no-install-recommends intel-opencl-icd \
+             || { echo "ERROR: intel-opencl-icd is not in this base image's repos."; \
+                  echo "Debian trixie dropped it — build with"; \
+                  echo "  --build-arg BASE_IMAGE=python:3.11-slim-bookworm"; \
+                  exit 1; }; } \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 

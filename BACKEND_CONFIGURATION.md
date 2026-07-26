@@ -319,9 +319,25 @@ turns every subsequent start into a load. Point it at a persistent volume in
 Docker or the cache is rebuilt on every container start.
 
 **Device access.** The CPU device needs nothing extra. The iGPU additionally
-needs `intel-opencl-icd` on the host and `--device /dev/dri` passed into the
-container; the NPU needs the `intel-driver-compiler-npu` / `intel-level-zero-npu`
-packages and `--device /dev/accel`.
+needs the `intel-opencl-icd` OpenCL driver *inside the image* and `--device
+/dev/dri` passed into the container; the NPU needs the
+`intel-driver-compiler-npu` / `intel-level-zero-npu` packages and
+`--device /dev/accel`.
+
+In Docker, build with both args:
+
+```bash
+docker build \
+  --build-arg ONNXRUNTIME_PACKAGE=onnxruntime-openvino \
+  --build-arg INSTALL_INTEL_GPU=1 .
+```
+
+`INSTALL_INTEL_GPU=1` requires a Debian bookworm base — trixie dropped
+`intel-opencl-icd` from its repositories. The Dockerfile pins
+`BASE_IMAGE=python:3.11-slim-bookworm` for exactly this reason; if you override
+`BASE_IMAGE` with a trixie variant, the GPU driver install will fail with a
+message telling you so. Without the driver the container still runs, but
+OpenVINO sees no GPU and silently uses the CPU device.
 
 Startup logs which providers the session actually got:
 ```
