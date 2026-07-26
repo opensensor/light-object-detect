@@ -8,7 +8,9 @@ import onnxruntime as ort
 from backends.base import DetectionBackend
 from backends.onnx.providers import (
     CPU_PROVIDER,
+    OPENVINO_PROVIDER,
     build_openvino_options,
+    openvino_runtime_info,
     resolve_providers,
 )
 from models.detection import DetectionResult, BoundingBox
@@ -50,6 +52,7 @@ class ONNXBackend(DetectionBackend):
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
         self.model_type = model_type.lower()
+        self.openvino_device_type = openvino_device_type
 
         # Check if model file exists
         if not os.path.exists(model_path):
@@ -74,7 +77,12 @@ class ONNXBackend(DetectionBackend):
 
         self.session = self._create_session(model_path, providers, provider_options)
         self.providers = self.session.get_providers()
+        self.openvino_info: Optional[Dict[str, Any]] = None
         logger.info("ONNX: session for %s using providers %s", model_path, self.providers)
+
+        if OPENVINO_PROVIDER in self.providers:
+            self.openvino_info = openvino_runtime_info()
+            self._log_openvino_devices(openvino_device_type)
 
         # Get model input/output details
         self.input_name = self.session.get_inputs()[0].name
@@ -87,6 +95,36 @@ class ONNXBackend(DetectionBackend):
         
         # Load labels
         self.labels = self._load_labels(labels_path)
+
+    def _log_openvino_devices(self, requested_device: Optional[str]) -> None:
+        """
+        Report which OpenVINO devices are visible, and warn if the wanted one isn't.
+
+        Args:
+            requested_device: The configured ONNX_OPENVINO_DEVICE_TYPE
+        """
+        info = self.openvino_info or {}
+        if "error" in info:
+            logger.warning("ONNX: could not query OpenVINO devices: %s", info["error"])
+            return
+
+        devices = info.get("available_devices", [])
+        logger.info("ONNX: OpenVINO devices visible: %s", devices)
+
+        wanted = (requested_device or "").upper()
+        if "GPU" not in devices and ("GPU" in wanted or wanted == "AUTO"):
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no GPU is visible (devices: %s), "
+                "so inference runs on the CPU device. The image needs "
+                "intel-opencl-icd (build with INSTALL_INTEL_GPU=1) and the "
+                "container needs /dev/dri passed through.",
+                requested_device, devices
+            )
+        if "NPU" in wanted and "NPU" not in devices:
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no NPU is visible (devices: %s)",
+                requested_device, devices
+            )
 
     def _create_session(self, model_path: str, providers: List[str],
                         provider_options: List[Dict[str, Any]]) -> "ort.InferenceSession":
@@ -518,7 +556,7 @@ class ONNXBackend(DetectionBackend):
         Returns:
             Dictionary with model information
         """
-        return {
+        info = {
             "backend": "onnx",
             "model_type": self.model_type,
             "model_path": self.model_path,
@@ -529,4 +567,12 @@ class ONNXBackend(DetectionBackend):
             "iou_threshold": self.iou_threshold,
             "providers": self.session.get_providers()
         }
+
+        # Which OpenVINO device the session can reach — the provider list alone
+        # cannot distinguish an iGPU run from a silent CPU-device fallback.
+        if self.openvino_info is not None:
+            info["openvino"] = dict(self.openvino_info)
+            info["openvino"]["requested_device_type"] = self.openvino_device_type
+
+        return info
 
