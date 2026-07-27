@@ -128,11 +128,19 @@ class ONNXBackend(DetectionBackend):
             )
 
         if "error" in info:
+            logger.warning("ONNX: OpenVINO device query failed: %s", info["error"])
+            return
+
+        if "device_query" in info:
+            # Not a fault: no Python bindings means no device list, nothing more.
+            # A pinned device_type that the GPU could not take would already have
+            # failed session creation above, so reaching here with the OpenVINO
+            # provider still active means the requested device accepted the model.
             logger.info(
-                "ONNX: OpenVINO device list unavailable (%s); render nodes=%s, "
-                "OpenCL ICDs=%s. Run 'clinfo -l' in the container to confirm "
-                "whether the GPU is reachable.",
-                info["error"], render_nodes, opencl_vendors
+                "ONNX: OpenVINO device list not enumerable (%s). Render nodes=%s, "
+                "OpenCL ICDs=%s. The session was created for device_type=%s, so "
+                "that device accepted the model.",
+                info["device_query"], render_nodes, opencl_vendors, requested_device
             )
             return
 

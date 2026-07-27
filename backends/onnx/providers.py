@@ -97,11 +97,16 @@ def openvino_runtime_info() -> Dict[str, Any]:
                 pass
         info["available_devices"] = devices
         info["device_names"] = names
-    except ImportError as exc:
-        # The onnxruntime-openvino wheel bundles the OpenVINO C++ runtime but
-        # not always the Python bindings, so the execution provider can be fully
-        # working while this import fails. Fall through to the evidence below.
-        info["error"] = f"openvino package not importable: {exc}"
+    except ImportError:
+        # Expected on Linux: the onnxruntime-openvino wheel bundles the OpenVINO
+        # C++ runtime and deliberately does not depend on the Python package, so
+        # the execution provider is fully working while this import fails. Not
+        # reported as an error — it says nothing about device availability.
+        info["device_query"] = (
+            "unavailable: the onnxruntime-openvino wheel bundles the OpenVINO "
+            "runtime without Python bindings; this is expected and does not "
+            "indicate a GPU problem"
+        )
     except Exception as exc:
         info["error"] = f"openvino device query failed: {exc}"
 
