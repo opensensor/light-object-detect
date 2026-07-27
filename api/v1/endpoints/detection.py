@@ -7,17 +7,118 @@ from PIL import Image
 import time
 import logging
 
-from models.detection import DetectionResponse, DetectionResult, ImageResponse, DescribeResponse, QueryResponse
+from models.detection import (
+    DetectionResponse, DetectionResult, BoundingBox, ImageResponse,
+    DescribeResponse, QueryResponse,
+)
 from models.zone import ZoneConfiguration
 from backends.factory import get_backend, BACKEND_REGISTRY
 from utils.image import validate_image, preprocess_image, image_to_bytes
 from utils.zones import filter_detections_by_zones, apply_class_filter, apply_size_filter
+from utils.tiling import (
+    MAX_TILES, TileDetection, is_truncated, map_tile_box_to_frame,
+    merge_tile_detections, plan_tiles, select_tiles, sweep_cycles,
+    tile_grid_overflowed,
+)
 from config import settings
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _detect_tiled(
+    detector,
+    image,
+    threshold: float,
+    budget: int,
+    min_object_px: int,
+    overlap: float,
+    tile_period: float,
+    deadline_s: float,
+    start_time: float,
+) -> tuple:
+    """Run up to ``budget`` inferences over a rotating tile grid and merge the results.
+
+    Returns ``(detections, tiles_run, plan_size)``. Detections come back in
+    frame-normalized coordinates, so the existing zone/class/size filters apply
+    downstream unchanged.
+    """
+    frame_w, frame_h = image.size
+    model_w = getattr(detector, "input_width", 0) or 640
+    model_h = getattr(detector, "input_height", 0) or 640
+
+    plan = plan_tiles(frame_w, frame_h, model_w, model_h, min_object_px, overlap)
+    if tile_grid_overflowed(frame_w, frame_h, model_w, model_h, min_object_px, overlap):
+        logger.warning(
+            "Tiling: grid for %dx%d at min_object_px=%d exceeds the %d-tile cap and was "
+            "truncated — raise min_object_px or the sweep will not cover the frame",
+            frame_w, frame_h, min_object_px, MAX_TILES,
+        )
+
+    # Cursor is keyed to when the request began, so a request that happens to span a
+    # second boundary still picks one consistent tile set.
+    selected = select_tiles(plan, budget, tile_period, start_time)
+    logger.info(
+        "Tiling: %dx%d frame, %d-tile grid, running %d this cycle (full sweep %d cycles)",
+        frame_w, frame_h, len(plan), len(selected), sweep_cycles(len(plan), budget),
+    )
+
+    collected = []
+    tiles_run = 0
+    for tile in selected:
+        # Always run tile 0 so a slow host degrades to current behaviour rather than
+        # returning nothing. Only then does the deadline gate subsequent tiles.
+        if tiles_run and (time.time() - start_time) >= deadline_s:
+            logger.warning(
+                "Tiling: deadline of %.1fs reached, stopping after %d/%d tiles — "
+                "results are partial for this cycle",
+                deadline_s, tiles_run, len(selected),
+            )
+            break
+
+        crop = image if tile.full_frame else image.crop(tile.box)
+        tile_detections = await asyncio.to_thread(
+            detector.detect, crop, confidence_threshold=threshold
+        )
+        tiles_run += 1
+
+        for det in tile_detections:
+            b = det.bounding_box
+            tile_box = (b.x_min, b.y_min, b.x_max, b.y_max)
+            collected.append(
+                TileDetection(
+                    label=det.label,
+                    confidence=det.confidence,
+                    box=map_tile_box_to_frame(tile_box, tile, frame_w, frame_h),
+                    tile_index=tile.index,
+                    truncated=(
+                        not tile.full_frame
+                        and is_truncated(tile_box, tile, frame_w, frame_h)
+                    ),
+                )
+            )
+
+    merged = merge_tile_detections(
+        collected, iou_threshold=settings.TILE_IOU_THRESHOLD
+    )
+    logger.info(
+        "Tiling: %d raw detections across %d tiles merged to %d",
+        len(collected), tiles_run, len(merged),
+    )
+
+    detections = [
+        DetectionResult(
+            label=m.label,
+            confidence=m.confidence,
+            bounding_box=BoundingBox(
+                x_min=m.box[0], y_min=m.box[1], x_max=m.box[2], y_max=m.box[3]
+            ),
+        )
+        for m in merged
+    ]
+    return detections, tiles_run, len(plan)
 
 
 @router.post("/detect", response_model=DetectionResponse)
@@ -42,6 +143,34 @@ async def detect_objects(
     min_height: Optional[float] = Query(
         None, description="Minimum normalized height for detections (0-1)", ge=0.0, le=1.0
     ),
+    tiles: int = Query(
+        settings.TILE_BUDGET,
+        description="Inferences per request (T). 1 disables tiling and uses the whole frame.",
+        ge=1, le=MAX_TILES,
+    ),
+    min_object_px: int = Query(
+        settings.TILE_MIN_OBJECT_PX,
+        description="Smallest object to resolve, in source pixels. Drives the tile size.",
+        ge=1,
+    ),
+    tile_overlap: float = Query(
+        settings.TILE_OVERLAP,
+        description="Overlap between adjacent tiles as a fraction of tile size",
+        ge=0.0, lt=1.0,
+    ),
+    tile_period: float = Query(
+        settings.TILE_PERIOD_SECONDS,
+        description="Rotation cursor period in seconds; match the stream's detection_interval",
+        gt=0.0,
+    ),
+    tile_deadline_s: float = Query(
+        settings.TILE_DEADLINE_SECONDS,
+        description="Stop issuing tiles once this many seconds have elapsed",
+        gt=0.0,
+    ),
+    stream: Optional[str] = Query(
+        None, description="Stream name, logged for correlation (used by change-priority later)"
+    ),
 ):
     """
     Detect objects in an uploaded image using the specified backend.
@@ -54,8 +183,21 @@ async def detect_objects(
     - **filter_classes**: Comma-separated list of classes to detect
     - **min_width**: Minimum width filter for detections
     - **min_height**: Minimum height filter for detections
+    - **tiles**: Fixed inference budget T per request. With T>1 the frame is split into
+      overlapping crops sized so a `min_object_px` object survives the scale down to
+      model input; tile 0 is always the whole frame and the remaining T-1 rotate over
+      the grid on a clock-derived cursor. Cost is exactly T inferences regardless of
+      scene content.
+    - **min_object_px**: Smallest object to resolve, in source pixels
+    - **tile_overlap**: Overlap between adjacent tiles (0-1)
+    - **tile_period**: Rotation period in seconds; set to the stream's detection_interval
+    - **tile_deadline_s**: Elapsed-time budget after which remaining tiles are skipped
+    - **stream**: Stream name, logged for correlation
     """
-    logger.info(f"Detection request: backend={backend}, confidence={confidence_threshold}, filename={file.filename}")
+    logger.info(
+        f"Detection request: backend={backend}, confidence={confidence_threshold}, "
+        f"filename={file.filename}, stream={stream}, tiles={tiles}"
+    )
     # Remap tflite to edgetpu if edgetpu is set as default backend
     # This allows LightNVR (which has no edgetpu option) to use the Coral TPU
     if backend == "tflite" and settings.DEFAULT_BACKEND == "edgetpu":
@@ -85,7 +227,11 @@ async def detect_objects(
         image = Image.open(io.BytesIO(contents))
         logger.debug(f"Image opened: size={image.size}, mode={image.mode}")
         validate_image(image, file.filename)
-        processed_image = preprocess_image(image)
+        # Full resolution survives to the backend: it letterboxes to model input
+        # itself, so an intermediate downscale here would only cost small objects.
+        processed_image = preprocess_image(
+            image, max_size=settings.MAX_DETECTION_IMAGE_SIZE
+        )
         logger.debug(f"Image preprocessed: size={processed_image.size}")
     except Exception as e:
         logger.error(f"Image validation/processing failed: {str(e)}")
@@ -105,11 +251,29 @@ async def detect_objects(
     # so health probes can still respond during long-running inference).
     start_time = time.time()
     try:
-        detections = await asyncio.to_thread(
-            detector.detect, processed_image, confidence_threshold=threshold
-        )
+        if tiles > 1:
+            detections, tiles_run, plan_size = await _detect_tiled(
+                detector=detector,
+                image=processed_image,
+                threshold=threshold,
+                budget=tiles,
+                min_object_px=min_object_px,
+                overlap=tile_overlap,
+                tile_period=tile_period,
+                deadline_s=tile_deadline_s,
+                start_time=start_time,
+            )
+        else:
+            # Untiled path, unchanged: one inference over the whole frame.
+            tiles_run, plan_size = 1, 1
+            detections = await asyncio.to_thread(
+                detector.detect, processed_image, confidence_threshold=threshold
+            )
         detection_time = time.time() - start_time
-        logger.info(f"Detection completed: {len(detections)} objects found in {detection_time*1000:.1f}ms")
+        logger.info(
+            f"Detection completed: {len(detections)} objects found in "
+            f"{detection_time*1000:.1f}ms ({tiles_run}/{plan_size} tiles)"
+        )
 
         # Log detected objects
         if detections:

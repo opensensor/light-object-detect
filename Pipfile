@@ -23,6 +23,9 @@ accelerate = ">=1.10.0"
 
 [dev-packages]
 ultralytics = "*"
+# Optional: the suites in tests/ are stdlib-only and self-run under plain
+# `python3 tests/test_*.py`, so pytest is a convenience, not a requirement.
+pytest = "*"
 
 [requires]
 python_version = "3.13"

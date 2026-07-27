@@ -53,7 +53,20 @@ class Settings(BaseSettings):
 
     # Image settings
     MAX_IMAGE_SIZE: int = 1024  # Maximum dimension (width or height) in pixels
+    # Detection keeps full resolution: the backend letterboxes to model input anyway,
+    # so an intermediate downscale only costs small objects. This is a sanity ceiling
+    # against absurd uploads, not a working limit — it should sit far above any real frame.
+    MAX_DETECTION_IMAGE_SIZE: int = 8192
     SUPPORTED_FORMATS: List[str] = ["jpg", "jpeg", "png"]
+
+    # Tiled detection defaults (see utils/tiling.py). All are overridable per-request
+    # via query params on /v1/detect, which is how lightNVR configures them per stream.
+    TILE_BUDGET: int = 1              # T: inferences per request; 1 disables tiling
+    TILE_MIN_OBJECT_PX: int = 60      # smallest object to resolve, in source pixels
+    TILE_OVERLAP: float = 0.25        # fraction of tile size overlapped with neighbours
+    TILE_PERIOD_SECONDS: float = 1.0  # rotation cursor period; match detection_interval
+    TILE_DEADLINE_SECONDS: float = 7.0  # stop issuing tiles at this elapsed time
+    TILE_IOU_THRESHOLD: float = 0.45  # cross-tile NMS threshold
     
     class Config:
         env_file = ".env"
