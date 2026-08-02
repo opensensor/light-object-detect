@@ -56,6 +56,11 @@ async def detect_objects(
     - **min_height**: Minimum height filter for detections
     """
     logger.info(f"Detection request: backend={backend}, confidence={confidence_threshold}, filename={file.filename}")
+    # Remap tflite to edgetpu if edgetpu is set as default backend
+    # This allows LightNVR (which has no edgetpu option) to use the Coral TPU
+    if backend == "tflite" and settings.DEFAULT_BACKEND == "edgetpu":
+        backend = "edgetpu"
+        logger.info("Remapping tflite backend request to edgetpu")
 
     # Validate backend
     if backend not in settings.AVAILABLE_BACKENDS:
