@@ -7,11 +7,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Minimal runtime libs for opencv-python on slim images
+# Minimal runtime libs for opencv-python on slim images + feranick's maintained
+# Coral Edge TPU runtime for Debian trixie (arm64)
+# See: https://github.com/feranick/libedgetpu/releases
+ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libgl1 \
         libglib2.0-0 \
+        curl \
+        wget \
+        libusb-1.0-0 \
+    && if [ "${TARGETARCH}" = "arm64" ]; then \
+        wget -q https://github.com/feranick/libedgetpu/releases/download/16.0TF2.19.1-1/libedgetpu1-std_16.0tf2.19.1-1.trixie_arm64.deb; \
+        dpkg -i libedgetpu1-std_16.0tf2.19.1-1.trixie_arm64.deb; \
+        rm libedgetpu1-std_16.0tf2.19.1-1.trixie_arm64.deb; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
 # Core Python deps (ONNX is now the default backend)
@@ -25,11 +36,15 @@ RUN python -m pip install --upgrade pip \
         pydantic-settings \
         pillow \
         exceptiongroup \
-        numpy \
+        "numpy<2.0" \
         onnxruntime \
         opencv-python \
         scipy \
         shapely
+
+# Install tflite-runtime for Coral Edge TPU support
+# Compatible with feranick's libedgetpu 16.0TF2.19.1-1
+RUN pip install tflite-runtime==2.14.0
 
 # Optional: install tensorflow for tflite backend support
 # Usage: docker build --build-arg INSTALL_TENSORFLOW=1 ...
