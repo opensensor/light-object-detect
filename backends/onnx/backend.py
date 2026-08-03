@@ -1,18 +1,33 @@
 import os
+import logging
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 import onnxruntime as ort
 
 from backends.base import DetectionBackend
+from backends.onnx.providers import (
+    CPU_PROVIDER,
+    OPENVINO_PROVIDER,
+    build_openvino_options,
+    openvino_runtime_info,
+    resolve_providers,
+)
 from models.detection import DetectionResult, BoundingBox
+
+logger = logging.getLogger(__name__)
 
 
 class ONNXBackend(DetectionBackend):
     """ONNX Runtime detection backend supporting YOLO and other ONNX models."""
     
     def __init__(self, model_path: str, labels_path: str, confidence_threshold: float = 0.5,
-                 iou_threshold: float = 0.45, model_type: str = "yolov8"):
+                 iou_threshold: float = 0.45, model_type: str = "yolov8",
+                 execution_providers: Any = "cuda,openvino,cpu",
+                 openvino_device_type: Optional[str] = "AUTO",
+                 openvino_precision: Optional[str] = None,
+                 openvino_num_threads: Optional[int] = None,
+                 openvino_cache_dir: Optional[str] = None):
         """
         Initialize the ONNX detection backend.
 
@@ -22,13 +37,23 @@ class ONNXBackend(DetectionBackend):
             confidence_threshold: Default confidence threshold
             iou_threshold: IoU threshold for NMS
             model_type: Type of model (yolov8, yolo11, yolo26, yolov5, yolox, etc.)
+            execution_providers: Preference order for ONNX Runtime execution
+                providers, as a comma-separated string or a list. Providers
+                missing from the installed wheel are skipped; CPU is always the
+                final fallback.
+            openvino_device_type: OpenVINO device (CPU, GPU, NPU, AUTO, or a
+                HETERO/MULTI/AUTO device list)
+            openvino_precision: OpenVINO inference precision (FP32, FP16, ACCURACY)
+            openvino_num_threads: Inference threads for the OpenVINO CPU device
+            openvino_cache_dir: Directory for OpenVINO compiled model blobs
         """
         self.model_path = model_path
         self.labels_path = labels_path
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
         self.model_type = model_type.lower()
-        
+        self.openvino_device_type = openvino_device_type
+
         # Check if model file exists
         if not os.path.exists(model_path):
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -38,13 +63,39 @@ class ONNXBackend(DetectionBackend):
             )
         
         # Initialize ONNX Runtime session
-        providers = ['CPUExecutionProvider']
-        # Try to use CUDA if available
-        if 'CUDAExecutionProvider' in ort.get_available_providers():
-            providers.insert(0, 'CUDAExecutionProvider')
-        
-        self.session = ort.InferenceSession(model_path, providers=providers)
-        
+        if openvino_cache_dir:
+            try:
+                os.makedirs(openvino_cache_dir, exist_ok=True)
+            except OSError as exc:
+                # The cache only saves recompilation on startup, so an unwritable
+                # directory must not take the backend down. Drop it rather than
+                # pass it on: OpenVINO fails session creation on a cache_dir it
+                # cannot write, which would turn a slow start into no start.
+                logger.warning(
+                    "ONNX: OpenVINO cache dir %s is unusable (%s); continuing "
+                    "without it. Expect a slow first inference on GPU or NPU.",
+                    openvino_cache_dir, exc
+                )
+                openvino_cache_dir = None
+        openvino_options = build_openvino_options(
+            device_type=openvino_device_type,
+            precision=openvino_precision,
+            num_threads=openvino_num_threads,
+            cache_dir=openvino_cache_dir,
+        )
+        providers, provider_options = resolve_providers(
+            execution_providers, ort.get_available_providers(), openvino_options
+        )
+
+        self.session = self._create_session(model_path, providers, provider_options)
+        self.providers = self.session.get_providers()
+        self.openvino_info: Optional[Dict[str, Any]] = None
+        logger.info("ONNX: session for %s using providers %s", model_path, self.providers)
+
+        if OPENVINO_PROVIDER in self.providers:
+            self.openvino_info = openvino_runtime_info()
+            self._log_openvino_devices(openvino_device_type)
+
         # Get model input/output details
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [output.name for output in self.session.get_outputs()]
@@ -56,7 +107,103 @@ class ONNXBackend(DetectionBackend):
         
         # Load labels
         self.labels = self._load_labels(labels_path)
-    
+
+    def _log_openvino_devices(self, requested_device: Optional[str]) -> None:
+        """
+        Report which OpenVINO devices are visible, and warn if the wanted one isn't.
+
+        Args:
+            requested_device: The configured ONNX_OPENVINO_DEVICE_TYPE
+        """
+        info = self.openvino_info or {}
+        wanted = (requested_device or "").upper()
+        wants_gpu = "GPU" in wanted or wanted == "AUTO"
+
+        # Whether the OpenCL stack could possibly reach an Intel GPU at all.
+        # Both halves have to be present: the driver in the image, and the
+        # device node in the container.
+        render_nodes = info.get("render_nodes", [])
+        opencl_vendors = info.get("opencl_vendors", [])
+        if wants_gpu and not render_nodes:
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no /dev/dri/render* node is "
+                "present — pass the device into the container "
+                "(devices: - /dev/dri/renderD128:/dev/dri/renderD128)",
+                requested_device
+            )
+        if wants_gpu and not opencl_vendors:
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no OpenCL ICD is installed in "
+                "/etc/OpenCL/vendors — rebuild the image with "
+                "--build-arg INSTALL_INTEL_GPU=1",
+                requested_device
+            )
+
+        if "error" in info:
+            logger.warning("ONNX: OpenVINO device query failed: %s", info["error"])
+            return
+
+        if "device_query" in info:
+            # Not a fault: no Python bindings means no device list, nothing more.
+            # A pinned device_type that the GPU could not take would already have
+            # failed session creation above, so reaching here with the OpenVINO
+            # provider still active means the requested device accepted the model.
+            logger.info(
+                "ONNX: OpenVINO device list not enumerable (%s). Render nodes=%s, "
+                "OpenCL ICDs=%s. The session was created for device_type=%s, so "
+                "that device accepted the model.",
+                info["device_query"], render_nodes, opencl_vendors, requested_device
+            )
+            return
+
+        devices = info.get("available_devices", [])
+        logger.info("ONNX: OpenVINO devices visible: %s", devices)
+
+        if wants_gpu and "GPU" not in devices:
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no GPU is visible (devices: %s), "
+                "so inference runs on the CPU device.",
+                requested_device, devices
+            )
+        if "NPU" in wanted and "NPU" not in devices:
+            logger.warning(
+                "ONNX: OpenVINO device_type=%s but no NPU is visible (devices: %s)",
+                requested_device, devices
+            )
+
+    def _create_session(self, model_path: str, providers: List[str],
+                        provider_options: List[Dict[str, Any]]) -> "ort.InferenceSession":
+        """
+        Create the inference session, falling back to CPU if the accelerator refuses.
+
+        An accelerator provider can fail at session-creation time rather than at
+        import time — OpenVINO in particular raises when a model cannot be
+        compiled for the requested device (common when targeting an NPU). Falling
+        back keeps the backend serving instead of taking the whole API down.
+
+        Args:
+            model_path: Path to the ONNX model file
+            providers: Execution providers in preference order
+            provider_options: Per-provider options, parallel to providers
+
+        Returns:
+            An ONNX Runtime InferenceSession
+        """
+        try:
+            return ort.InferenceSession(
+                model_path, providers=providers, provider_options=provider_options
+            )
+        except Exception as exc:
+            if providers == [CPU_PROVIDER]:
+                raise
+            logger.warning(
+                "ONNX: could not create a session with providers %s (%s); "
+                "falling back to %s", providers, exc, CPU_PROVIDER
+            )
+            return ort.InferenceSession(
+                model_path, providers=[CPU_PROVIDER], provider_options=[{}]
+            )
+
     def _load_labels(self, labels_path: str) -> List[str]:
         """
         Load labels from file.
@@ -454,7 +601,7 @@ class ONNXBackend(DetectionBackend):
         Returns:
             Dictionary with model information
         """
-        return {
+        info = {
             "backend": "onnx",
             "model_type": self.model_type,
             "model_path": self.model_path,
@@ -465,4 +612,12 @@ class ONNXBackend(DetectionBackend):
             "iou_threshold": self.iou_threshold,
             "providers": self.session.get_providers()
         }
+
+        # Which OpenVINO device the session can reach — the provider list alone
+        # cannot distinguish an iGPU run from a silent CPU-device fallback.
+        if self.openvino_info is not None:
+            info["openvino"] = dict(self.openvino_info)
+            info["openvino"]["requested_device_type"] = self.openvino_device_type
+
+        return info
 

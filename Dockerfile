@@ -1,4 +1,11 @@
-FROM python:3.11-slim
+# Overridable so the INSTALL_INTEL_GPU build can pin an older Debian. The
+# default stays on the floating tag (currently trixie) because the arm64 Coral
+# runtime installed below is a trixie .deb; INSTALL_INTEL_GPU needs
+# intel-opencl-icd, which trixie dropped, so that build must pass
+# --build-arg BASE_IMAGE=python:3.11-slim-bookworm. The two are mutually
+# exclusive, which is harmless in practice: Intel iGPU builds are never arm64.
+ARG BASE_IMAGE=python:3.11-slim
+FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -25,6 +32,14 @@ RUN apt-get update \
     fi \
     && rm -rf /var/lib/apt/lists/*
 
+# Which ONNX Runtime wheel to install. These are mutually exclusive drop-in
+# replacements for each other, so pick exactly one:
+#   onnxruntime          CPU only (default)
+#   onnxruntime-openvino Intel CPU / iGPU / NPU via the OpenVINO provider
+#   onnxruntime-gpu      NVIDIA CUDA
+# Usage: docker build --build-arg ONNXRUNTIME_PACKAGE=onnxruntime-openvino ...
+ARG ONNXRUNTIME_PACKAGE=onnxruntime
+
 # Core Python deps (ONNX is now the default backend)
 COPY Pipfile Pipfile.lock ./
 RUN python -m pip install --upgrade pip \
@@ -37,7 +52,7 @@ RUN python -m pip install --upgrade pip \
         pillow \
         exceptiongroup \
         "numpy<2.0" \
-        onnxruntime \
+        "$ONNXRUNTIME_PACKAGE" \
         opencv-python \
         scipy \
         shapely
@@ -45,6 +60,21 @@ RUN python -m pip install --upgrade pip \
 # Install tflite-runtime for Coral Edge TPU support
 # Compatible with feranick's libedgetpu 16.0TF2.19.1-1
 RUN pip install tflite-runtime==2.14.0
+
+# Optional: Intel GPU userspace driver, required for OpenVINO's GPU device.
+# The OpenVINO wheel ships the GPU plugin but still needs the host OpenCL
+# driver to see /dev/dri; without it OpenVINO silently falls back to CPU.
+# Usage: docker build --build-arg INSTALL_INTEL_GPU=1 ...
+ARG INSTALL_INTEL_GPU=0
+RUN if [ "$INSTALL_INTEL_GPU" = "1" ]; then \
+        apt-get update \
+        && { apt-get install -y --no-install-recommends intel-opencl-icd clinfo \
+             || { echo "ERROR: intel-opencl-icd is not in this base image's repos."; \
+                  echo "Debian trixie dropped it — build with"; \
+                  echo "  --build-arg BASE_IMAGE=python:3.11-slim-bookworm"; \
+                  exit 1; }; } \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Optional: install tensorflow for tflite backend support
 # Usage: docker build --build-arg INSTALL_TENSORFLOW=1 ...
