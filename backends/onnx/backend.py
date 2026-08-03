@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class ONNXBackend(DetectionBackend):
     """ONNX Runtime detection backend supporting YOLO and other ONNX models."""
-
+    
     def __init__(self, model_path: str, labels_path: str, confidence_threshold: float = 0.5,
                  iou_threshold: float = 0.45, model_type: str = "yolov8",
                  execution_providers: Any = "cuda,openvino,cpu",
@@ -61,7 +61,7 @@ class ONNXBackend(DetectionBackend):
                 f"ONNX model not found at {model_path}. "
                 f"Please download a YOLOv8 ONNX model and place it at this location."
             )
-
+        
         # Initialize ONNX Runtime session
         if openvino_cache_dir:
             try:
