@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from PIL import Image
 import io
 
@@ -38,12 +38,16 @@ def validate_image(image: Image.Image, filename: str) -> None:
         raise ValueError(f"Invalid image dimensions: {image.width}x{image.height}")
 
 
-def preprocess_image(image: Image.Image) -> Image.Image:
+def preprocess_image(image: Image.Image, max_size: Optional[int] = None) -> Image.Image:
     """
     Preprocess image for detection.
 
     Args:
         image: PIL Image to preprocess
+        max_size: Longest-side cap in pixels. Defaults to settings.MAX_IMAGE_SIZE.
+            Detection passes settings.MAX_DETECTION_IMAGE_SIZE so full resolution
+            survives to the backend, which letterboxes to model input itself — an
+            intermediate downscale here only costs small objects.
 
     Returns:
         Preprocessed PIL Image
@@ -61,7 +65,8 @@ def preprocess_image(image: Image.Image) -> Image.Image:
         image = background
 
     # Resize if image is too large
-    max_size = settings.MAX_IMAGE_SIZE
+    if max_size is None:
+        max_size = settings.MAX_IMAGE_SIZE
     if image.width > max_size or image.height > max_size:
         # Calculate new dimensions while preserving aspect ratio
         if image.width > image.height:
