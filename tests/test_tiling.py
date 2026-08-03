@@ -106,12 +106,36 @@ class TestPlanTiles(unittest.TestCase):
     def test_grid_is_capped_and_overflow_is_reported(self):
         # A very small min_object_px explodes the grid; the cap holds and the
         # companion predicate tells the caller it was truncated.
-        plan = plan_tiles(4000, 3000, 640, 640, 2000)
-        self.assertLessEqual(len(plan), MAX_TILES)
-        if len(plan) == MAX_TILES:
-            self.assertTrue(
-                tile_grid_overflowed(4000, 3000, 640, 640, 2000)
-            )
+        #
+        # min_object_px must be *small* to overflow: it shrinks the crop, which
+        # multiplies the tile count. An earlier version of this test passed 2000,
+        # which is large enough to collapse the grid to the single full-frame tile,
+        # so every assertion below passed without the overflow path ever running.
+        plan = plan_tiles(4000, 3000, 640, 640, 8)
+        self.assertEqual(len(plan), MAX_TILES, "expected the cap to bind here")
+        self.assertTrue(tile_grid_overflowed(4000, 3000, 640, 640, 8))
+
+    def test_crop_scale_never_puts_the_target_below_the_model_floor(self):
+        """The invariant the whole module is built on, asserted rather than assumed.
+
+        A min_object_px object inside a crop, scaled down to model input, must land
+        at or above MIN_MODEL_PX. Rounding the crop size up instead of down breaks
+        this by a fraction of a pixel, which is exactly the kind of drift no other
+        test here would notice.
+        """
+        for img_w, img_h in [(1920, 1080), (2592, 1944), (3840, 2160)]:
+            for min_object_px in range(10, 201, 7):
+                plan = plan_tiles(img_w, img_h, 640, 640, min_object_px)
+                for tile in plan:
+                    if tile.full_frame:
+                        continue  # tile 0 is the un-magnified baseline by design
+                    scale = 640.0 / max(tile.width, tile.bottom - tile.top)
+                    self.assertGreaterEqual(
+                        min_object_px * scale, MIN_MODEL_PX,
+                        f"{img_w}x{img_h} min_object_px={min_object_px}: a "
+                        f"{min_object_px}px object reaches the model at "
+                        f"{min_object_px * scale:.4f}px, under the {MIN_MODEL_PX}px floor",
+                    )
 
     def test_overflow_predicate_false_for_normal_grids(self):
         self.assertFalse(tile_grid_overflowed(1920, 1080, 640, 640, 60))

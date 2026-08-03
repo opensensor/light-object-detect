@@ -12,9 +12,9 @@ an inference runtime. Callers adapt to and from their own detection types at the
 Boxes are ``(x_min, y_min, x_max, y_max)`` normalized to whatever frame they belong to.
 """
 
-from dataclasses import dataclass, replace
-from math import ceil
-from typing import Iterable, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from math import ceil, floor
+from typing import Iterable, List, Sequence, Tuple
 
 Box = Tuple[float, float, float, float]
 
@@ -74,6 +74,22 @@ class TileDetection:
     truncated: bool = False
 
 
+def _region_size(model_dim: int, required_scale: float) -> int:
+    """Crop size along one axis that keeps a ``min_object_px`` object at MIN_MODEL_PX.
+
+    Rounds **down**. A crop of ``region`` letterboxed to ``model_dim`` scales a source
+    object by ``model_dim / region``, so the invariant needs
+    ``region <= model_dim / required_scale``. Rounding up overshoots that bound and
+    lands the object fractionally *under* MIN_MODEL_PX — the opposite of the guarantee
+    this module advertises. The error is sub-pixel, but floor costs nothing and makes
+    the code match the docstring.
+
+    Shared by plan_tiles and tile_grid_overflowed so the two cannot disagree about how
+    big a tile is, and therefore cannot disagree about whether the grid overflowed.
+    """
+    return max(1, int(floor(model_dim / required_scale)))
+
+
 def _axis_starts(total: int, region: int, stride: int) -> List[int]:
     """Crop origins along one axis, last one flush to the far edge.
 
@@ -131,8 +147,8 @@ def plan_tiles(
     if required_scale <= 0:
         return [full]
 
-    region_w = min(img_w, int(ceil(model_w / required_scale)))
-    region_h = min(img_h, int(ceil(model_h / required_scale)))
+    region_w = min(img_w, _region_size(model_w, required_scale))
+    region_h = min(img_h, _region_size(model_h, required_scale))
 
     # Degenerate: one crop already covers the frame, so tiling would re-inspect the
     # same pixels at the same scale. Tile 0 alone is strictly cheaper and identical.
@@ -179,8 +195,8 @@ def tile_grid_overflowed(
     if img_w <= 0 or img_h <= 0 or model_w <= 0 or model_h <= 0:
         return False
     required_scale = MIN_MODEL_PX / float(min_object_px)
-    region_w = min(img_w, int(ceil(model_w / required_scale)))
-    region_h = min(img_h, int(ceil(model_h / required_scale)))
+    region_w = min(img_w, _region_size(model_w, required_scale))
+    region_h = min(img_h, _region_size(model_h, required_scale))
     if region_w >= img_w and region_h >= img_h:
         return False
     stride_w = int(region_w * (1.0 - overlap))
