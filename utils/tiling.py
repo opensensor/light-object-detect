@@ -74,40 +74,83 @@ class TileDetection:
     truncated: bool = False
 
 
-def _region_size(model_dim: int, required_scale: float) -> int:
-    """Crop size along one axis that keeps a ``min_object_px`` object at MIN_MODEL_PX.
+def _region_dims(img_w: int, img_h: int, model_w: int, model_h: int,
+                 required_scale: float) -> Tuple[int, int]:
+    """Crop size that holds a ``min_object_px`` object at MIN_MODEL_PX, aspect-matched.
 
-    Rounds **down**. A crop of ``region`` letterboxed to ``model_dim`` scales a source
-    object by ``model_dim / region``, so the invariant needs
-    ``region <= model_dim / required_scale``. Rounding up overshoots that bound and
-    lands the object fractionally *under* MIN_MODEL_PX — the opposite of the guarantee
-    this module advertises. The error is sub-pixel, but floor costs nothing and makes
-    the code match the docstring.
+    **The crop must have the model's aspect ratio.** The backend letterboxes each crop
+    independently, so it scales by ``min(model_w/region_w, model_h/region_h)`` and pads
+    the slack axis with grey bars. A crop shaped unlike the model input therefore wastes
+    part of the input on padding *and* is scaled by whichever axis is relatively larger.
+
+    Sizing the axes independently — the obvious reading of "region = model / scale" —
+    gets this wrong whenever one axis clamps to the frame and the other does not. On
+    1080p at min_object_px=60 it yields a 1600x1080 crop against a 640x640 input: 32% of
+    the input is padding and the effective scale is 0.400, when a square 1080x1080 crop
+    of the same frame would give 0.593 for the same tile count.
+
+    So parameterise the crop as ``(model_w * t, model_h * t)`` and take the largest ``t``
+    that still fits the frame and still meets the scale requirement::
+
+        t = min(img_w/model_w, img_h/model_h, 1/required_scale)
+
+    The third term is the accuracy floor; the first two are the frame. Whichever binds,
+    the crop keeps the model's shape, so the letterbox never pads.
+
+    Rounds **down**, so ``region <= model_dim * t`` and the letterbox scale stays at or
+    above ``required_scale``. Rounding up would land the object fractionally under
+    MIN_MODEL_PX — the opposite of the guarantee this module advertises.
 
     Shared by plan_tiles and tile_grid_overflowed so the two cannot disagree about how
     big a tile is, and therefore cannot disagree about whether the grid overflowed.
     """
-    return max(1, int(floor(model_dim / required_scale)))
+    t = min(img_w / float(model_w), img_h / float(model_h), 1.0 / required_scale)
+    return max(1, int(floor(model_w * t))), max(1, int(floor(model_h * t)))
 
 
 def _axis_starts(total: int, region: int, stride: int) -> List[int]:
-    """Crop origins along one axis, last one flush to the far edge.
+    """Crop origins along one axis: first at 0, last flush to the far edge, evenly spread.
 
-    Flushing rather than letting the final crop overhang keeps every tile the same
-    size, which matters because the backend letterboxes each crop independently —
-    a short final tile would be scaled differently from its neighbours.
+    Every crop is the same size, which matters because the backend letterboxes each one
+    independently — a short final crop would be scaled differently from its neighbours.
+
+    Spacing them **evenly** rather than walking by ``stride`` and flushing the last one
+    is what keeps the axis gapless by construction. Walking-and-flushing puts the final
+    crop wherever the remainder falls, which can land it either almost on top of its
+    predecessor (a wasted inference that dilutes the rotation pool) or too far past it
+    (an uncovered strip). Distributing the span over a whole number of steps cannot do
+    either: the spacing is uniform, and capping it at ``region`` guarantees consecutive
+    crops touch.
+
+    The chosen spacing is at most the requested ``stride``, so the real overlap is always
+    at least what the caller asked for.
     """
     if region >= total:
         return [0]
     stride = max(1, stride)
-    starts = [0]
-    while starts[-1] + region < total:
-        nxt = starts[-1] + stride
-        if nxt + region >= total:
-            starts.append(total - region)
-            break
-        starts.append(nxt)
-    return starts
+    span = total - region
+
+    # A second crop that breaks little new ground is not worth an inference. Measured
+    # against the region, not the stride: what matters is the fraction of the crop that
+    # is new, and a stride-relative test lets through pairs overlapping 90%+ (4K at
+    # min_object_px=74 wanted crops at y=0 and y=187 of a 1973px region).
+    # The strip left uncovered is at most this fraction of the axis, and tile 0 — the
+    # full frame — still inspects it every cycle. It sits at the far edge, which for a
+    # fixed camera is foreground, where objects are large and magnification is moot.
+    if span < region * 0.15:
+        return [0]
+
+    # Number of gaps between starts. The stride term sets the overlap; the region term
+    # guarantees no gap even at overlap=0. The small tolerance stops a frame that
+    # overshoots the stride by a hair from buying a whole extra crop for it — 1920 wide
+    # with a 1080 region overshoots by 4%, and paying for a third column there would
+    # give 61% overlap where 25% was asked for.
+    steps = max(
+        1,
+        int(ceil(span / float(region))),
+        int(ceil(span / float(stride) - 0.05)),
+    )
+    return [int(round(i * span / float(steps))) for i in range(steps + 1)]
 
 
 def plan_tiles(
@@ -147,11 +190,13 @@ def plan_tiles(
     if required_scale <= 0:
         return [full]
 
-    region_w = min(img_w, _region_size(model_w, required_scale))
-    region_h = min(img_h, _region_size(model_h, required_scale))
+    # Degenerate: the full frame already resolves the target, so cropping would buy
+    # nothing. Tested on scale rather than geometry — with aspect-matched crops a
+    # region can be smaller than the frame on both axes yet still offer no gain.
+    if min(model_w / float(img_w), model_h / float(img_h)) >= required_scale:
+        return [full]
 
-    # Degenerate: one crop already covers the frame, so tiling would re-inspect the
-    # same pixels at the same scale. Tile 0 alone is strictly cheaper and identical.
+    region_w, region_h = _region_dims(img_w, img_h, model_w, model_h, required_scale)
     if region_w >= img_w and region_h >= img_h:
         return [full]
 
@@ -195,8 +240,10 @@ def tile_grid_overflowed(
     if img_w <= 0 or img_h <= 0 or model_w <= 0 or model_h <= 0:
         return False
     required_scale = MIN_MODEL_PX / float(min_object_px)
-    region_w = min(img_w, _region_size(model_w, required_scale))
-    region_h = min(img_h, _region_size(model_h, required_scale))
+    # Mirrors plan_tiles exactly, including the scale-based degenerate check.
+    if min(model_w / float(img_w), model_h / float(img_h)) >= required_scale:
+        return False
+    region_w, region_h = _region_dims(img_w, img_h, model_w, model_h, required_scale)
     if region_w >= img_w and region_h >= img_h:
         return False
     stride_w = int(region_w * (1.0 - overlap))
