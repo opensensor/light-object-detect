@@ -1,7 +1,10 @@
-# Pinned to a specific Debian release rather than the floating python:3.11-slim
-# tag, which now resolves to trixie. Trixie dropped intel-opencl-icd, so the
-# INSTALL_INTEL_GPU build below cannot work there.
-ARG BASE_IMAGE=python:3.11-slim-bookworm
+# Overridable so the INSTALL_INTEL_GPU build can pin an older Debian. The
+# default stays on the floating tag (currently trixie) because the arm64 Coral
+# runtime installed below is a trixie .deb; INSTALL_INTEL_GPU needs
+# intel-opencl-icd, which trixie dropped, so that build must pass
+# --build-arg BASE_IMAGE=python:3.11-slim-bookworm. The two are mutually
+# exclusive, which is harmless in practice: Intel iGPU builds are never arm64.
+ARG BASE_IMAGE=python:3.11-slim
 FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

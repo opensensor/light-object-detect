@@ -64,7 +64,19 @@ class ONNXBackend(DetectionBackend):
 
         # Initialize ONNX Runtime session
         if openvino_cache_dir:
-            os.makedirs(openvino_cache_dir, exist_ok=True)
+            try:
+                os.makedirs(openvino_cache_dir, exist_ok=True)
+            except OSError as exc:
+                # The cache only saves recompilation on startup, so an unwritable
+                # directory must not take the backend down. Drop it rather than
+                # pass it on: OpenVINO fails session creation on a cache_dir it
+                # cannot write, which would turn a slow start into no start.
+                logger.warning(
+                    "ONNX: OpenVINO cache dir %s is unusable (%s); continuing "
+                    "without it. Expect a slow first inference on GPU or NPU.",
+                    openvino_cache_dir, exc
+                )
+                openvino_cache_dir = None
         openvino_options = build_openvino_options(
             device_type=openvino_device_type,
             precision=openvino_precision,
