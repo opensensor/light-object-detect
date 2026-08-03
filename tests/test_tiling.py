@@ -161,10 +161,20 @@ class TestTileShapeAndCoverage(unittest.TestCase):
     axis clamped to the frame and the other did not.
     """
 
-    RESOLUTIONS = [
+    # Landscape, the portrait transpose of each, and some extreme aspect ratios.
+    # Portrait matters because the sizing rule takes a min over both axes, so a bug
+    # that only shows when height binds before width would hide in landscape-only
+    # sweeps — which is exactly the class of bug this suite was written for.
+    _LANDSCAPE = [
         (1920, 1080), (2592, 1944), (3840, 2160),
         (1280, 720), (1600, 1200), (2048, 1536), (720, 576),
     ]
+    RESOLUTIONS = (
+        _LANDSCAPE
+        + [(h, w) for (w, h) in _LANDSCAPE]
+        + [(1080, 3840), (3840, 1080), (400, 1920), (1920, 400),
+           (1080, 1080), (500, 4000), (4000, 500)]
+    )
 
     def _crops(self, img_w, img_h, min_object_px):
         plan = plan_tiles(img_w, img_h, 640, 640, min_object_px)
@@ -267,6 +277,46 @@ class TestTileShapeAndCoverage(unittest.TestCase):
         # A 60px object clears the detection floor with room to spare, rather than
         # landing exactly on it as the old sizing did.
         self.assertGreater(60 * crop_scale, MIN_MODEL_PX * 1.4)
+
+    def test_a_portrait_frame_is_the_transpose_of_its_landscape_twin(self):
+        """Orientation must not change the grid, only rotate it.
+
+        The sizing rule takes a min over both axes, so it is symmetric by
+        construction — this pins that, and would catch any future change that
+        special-cases width. Truncated grids are excluded: the cap keeps tiles in
+        row-major order, so a grid and its transpose legitimately retain different
+        subsets once MAX_TILES bites.
+        """
+        for img_w, img_h in self._LANDSCAPE + [(3840, 1080), (400, 1920)]:
+            for min_object_px in range(20, 161, 4):
+                landscape = plan_tiles(img_w, img_h, 640, 640, min_object_px)
+                portrait = plan_tiles(img_h, img_w, 640, 640, min_object_px)
+                if len(landscape) == MAX_TILES or len(portrait) == MAX_TILES:
+                    continue
+                self.assertEqual(
+                    sorted((t.left, t.top, t.width, t.bottom - t.top) for t in landscape),
+                    sorted((t.top, t.left, t.bottom - t.top, t.width) for t in portrait),
+                    f"{img_w}x{img_h} and {img_h}x{img_w} at min_object_px="
+                    f"{min_object_px} are not transposes of each other",
+                )
+
+    def test_crops_stay_inside_the_frame(self):
+        for img_w, img_h in self.RESOLUTIONS:
+            for min_object_px in (24, 40, 60, 100):
+                _, crops = self._crops(img_w, img_h, min_object_px)
+                for tile in crops:
+                    self.assertGreaterEqual(tile.left, 0)
+                    self.assertGreaterEqual(tile.top, 0)
+                    self.assertLessEqual(
+                        tile.right, img_w,
+                        f"{img_w}x{img_h} min_object_px={min_object_px}: crop right "
+                        f"edge {tile.right} past the frame",
+                    )
+                    self.assertLessEqual(
+                        tile.bottom, img_h,
+                        f"{img_w}x{img_h} min_object_px={min_object_px}: crop bottom "
+                        f"edge {tile.bottom} past the frame",
+                    )
 
     def test_collapses_when_the_full_frame_already_resolves_the_target(self):
         # Tested on scale, not geometry: with aspect-matched crops a region can be
