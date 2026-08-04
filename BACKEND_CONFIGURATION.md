@@ -282,86 +282,24 @@ OpenVINO runs the same ONNX model on Intel hardware — including the integrated
 GPU and the NPU found on Core Ultra parts — and is typically several times
 faster than the plain CPU provider on the same machine.
 
-Install ONNX Runtime with OpenVINO support. This is a **drop-in replacement**
-for `onnxruntime`, not an addition — having both installed breaks the import:
+It is an execution provider inside the existing `onnx` backend, not a separate
+backend, so `DEFAULT_BACKEND` stays `onnx`. Install the drop-in replacement wheel
+and point `ONNX_EXECUTION_PROVIDERS` at it:
 
 ```bash
 pip uninstall -y onnxruntime onnxruntime-gpu
 pip install onnxruntime-openvino
 ```
 
-Confirm the provider registered:
-```bash
-python3 -c "import onnxruntime as ort; print(ort.get_available_providers())"
-# expect 'OpenVINOExecutionProvider' in the list
-```
-
-Configure it in `.env`:
-
-```bash
-# Preference order. Providers missing from the installed wheel are skipped,
-# so this same value is safe on a CUDA box and on a plain-CPU box.
+```dotenv
 ONNX_EXECUTION_PROVIDERS=openvino,cpu
-
-# AUTO lets OpenVINO pick the best device it can see. Pin it with CPU, GPU or
-# NPU, or spread work with a device list such as MULTI:GPU,CPU.
-ONNX_OPENVINO_DEVICE_TYPE=AUTO
-
-# Optional tuning
-#ONNX_OPENVINO_PRECISION=FP16          # FP32, FP16 or ACCURACY
-#ONNX_OPENVINO_NUM_THREADS=4           # CPU device only
-#ONNX_OPENVINO_CACHE_DIR=/tmp/ov_cache # caches compiled blobs
+ONNX_OPENVINO_DEVICE_TYPE=GPU
+ONNX_OPENVINO_CACHE_DIR=/cache/openvino
 ```
 
-Set `ONNX_OPENVINO_CACHE_DIR` if you target GPU or NPU. The first session
-compiles the model for the device, which can take tens of seconds; the cache
-turns every subsequent start into a load. Point it at a persistent volume in
-Docker or the cache is rebuilt on every container start.
-
-**Device access.** The CPU device needs nothing extra. The iGPU additionally
-needs the `intel-opencl-icd` OpenCL driver *inside the image* and `--device
-/dev/dri` passed into the container; the NPU needs the
-`intel-driver-compiler-npu` / `intel-level-zero-npu` packages and
-`--device /dev/accel`.
-
-In Docker, build with both args:
-
-```bash
-docker build \
-  --build-arg ONNXRUNTIME_PACKAGE=onnxruntime-openvino \
-  --build-arg INSTALL_INTEL_GPU=1 .
-```
-
-`INSTALL_INTEL_GPU=1` requires a Debian bookworm base — trixie dropped
-`intel-opencl-icd` from its repositories. The Dockerfile pins
-`BASE_IMAGE=python:3.11-slim-bookworm` for exactly this reason; if you override
-`BASE_IMAGE` with a trixie variant, the GPU driver install will fail with a
-message telling you so. Without the driver the container still runs, but
-OpenVINO sees no GPU and silently uses the CPU device.
-
-Startup logs which providers the session actually got, and which OpenVINO
-devices it can see:
-```
-ONNX: session for backends/onnx/models/yolo11n.onnx using providers ['OpenVINOExecutionProvider', 'CPUExecutionProvider']
-ONNX: OpenVINO devices visible: ['CPU', 'GPU']
-```
-
-The same detail is available at runtime from `GET /api/v1/backends`, under
-`backends.onnx.model_info.openvino`:
-
-```bash
-curl -s http://localhost:8000/api/v1/backends | jq '.backends.onnx.model_info | {providers, openvino}'
-```
-
-**A provider list containing `OpenVINOExecutionProvider` does not mean the GPU
-is being used.** If `available_devices` is `["CPU"]`, OpenVINO is running on
-its CPU device — faster than the plain CPU provider, but not the iGPU. The
-backend logs a warning naming that case at startup.
-
-If OpenVINO cannot compile the model for the requested device — most common when
-pinning `NPU` — the backend logs a warning and falls back to CPU rather than
-failing the whole API. Watch for that warning if throughput looks unchanged
-after switching.
+See **[docs/OPENVINO.md](docs/OPENVINO.md)** for the full setting reference, the
+Docker build arguments and device passthrough, how to confirm you are really on the
+iGPU rather than silently on the CPU device, and a troubleshooting table.
 
 ### Custom Confidence Thresholds
 
