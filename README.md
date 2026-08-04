@@ -95,6 +95,17 @@ In lightNVR, the API URL is typically:
 
 - `http://<docker-host>:8000/api/v1/detect`
 
+lightNVR passes that URL through verbatim, including any query string, so every
+detection option can be set **per stream** from the stream's custom-endpoint field —
+no lightNVR changes required:
+
+```
+http://<docker-host>:8000/api/v1/detect?stream=driveway&filter_classes=person,car&tiles=4&min_object_px=60&tile_period=1
+```
+
+Unrecognised parameters are ignored, so a URL written for a newer server stays
+safe against an older one.
+
 ## API Endpoints
 
 - `GET /` - Root endpoint with API information
@@ -112,6 +123,26 @@ curl -X POST "http://localhost:9001/api/v1/detect" \
   -F "backend=tflite" \
   -F "confidence_threshold=0.5"
 ```
+
+### Tiled detection for small objects
+
+Distant objects are often too small to detect once a frame has been scaled down to
+the model's input — a 60 px person in a 1080p frame arrives at a 640 px YOLO model
+as 20 px, below the ~24 px where it reliably fires. Tiled detection crops regions at
+a higher effective scale and rotates through them on a fixed inference budget, so
+cost stays flat regardless of scene content.
+
+Set it per request with `tiles`, `min_object_px` and `tile_period`, or server-wide
+with the `TILE_*` environment variables:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/detect?tiles=4&min_object_px=60&tile_period=1" \
+  -F "file=@frame.jpg"
+```
+
+See **[docs/TILED_DETECTION.md](docs/TILED_DETECTION.md)** for the full parameter
+reference, the matching `.env` variable names, how to choose `min_object_px` and
+`tiles`, and the `tile_period` aliasing trap that causes permanent blind spots.
 
 ## Adding New Backends
 
@@ -135,6 +166,8 @@ light-object-detect/
 │   ├── factory.py          # Backend factory
 │   └── tflite/             # TFLite backend
 │       └── backend.py      # TFLite implementation
+├── docs/                   # Reference documentation
+│   └── TILED_DETECTION.md  # Tiled detection parameters and tuning
 ├── models/                 # Data models
 │   └── detection.py        # Detection models
 ├── scripts/                # Utility scripts
