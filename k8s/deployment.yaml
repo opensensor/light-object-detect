@@ -7,12 +7,10 @@ metadata:
     app.kubernetes.io/name: light-object-detect
     app.kubernetes.io/part-of: opensensor
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: light-object-detect
-  # Recreate strategy required: the HuggingFace cache PVC is
-  # ReadWriteOnce, so only one pod can mount it at a time.
   strategy:
     type: Recreate
   template:
@@ -20,71 +18,84 @@ spec:
       labels:
         app.kubernetes.io/name: light-object-detect
         app.kubernetes.io/part-of: opensensor
+      annotations:
+        hosting.opensensor.io/launcher-sha256: 5e3bfc417b37dc760fa2ac9b67e36067f32210a53024af8327f73f0cf6eb07f6
     spec:
       imagePullSecrets:
-        - name: whitewhale
+      - name: whitewhale
       containers:
-        - name: light-object-detect
-          image: ghcr.io/opensensor/light-object-detect:latest
-          imagePullPolicy: Always
-          ports:
-            - name: http
-              containerPort: 8000
-              protocol: TCP
-          env:
-            - name: LOG_LEVEL
-              value: "INFO"
-            - name: ONNX_MODEL_PATH
-              value: "backends/onnx/models/yolo26n.onnx"
-            - name: ONNX_MODEL_TYPE
-              value: "yolo26"
-            # HuggingFace cache directory — backed by PVC so models
-            # survive pod restarts and don't re-download.
-            - name: HF_HOME
-              value: "/cache/huggingface"
-            # Moondream settings
-            - name: MOONDREAM_MODEL_NAME
-              value: "vikhyatk/moondream2"
-            - name: MOONDREAM_DEVICE
-              value: "cpu"
-          volumeMounts:
-            - name: hf-cache
-              mountPath: /cache/huggingface
-          resources:
-            requests:
-              cpu: 200m
-              memory: 1Gi
-            limits:
-              cpu: "2"
-              memory: 4Gi
-          # Moondream model download + load can take 2-3 minutes on
-          # first start (cold cache).  After that, startup is ~30-60s.
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 30        # up to 5 minutes for cold start
-            timeoutSeconds: 5
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 15
-            periodSeconds: 60
-            timeoutSeconds: 30
-            failureThreshold: 5          # ~5 min of unresponsiveness before kill
-      volumes:
+      - name: light-object-detect
+        image: ghcr.io/opensensor/light-object-detect@sha256:ce8010794ecd286f82bc2cbb44b7ece12169d122018fe26b7f96408a3efd8a1f
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: LOG_LEVEL
+          value: INFO
+        - name: ONNX_MODEL_PATH
+          value: backends/onnx/models/yolo26n.onnx
+        - name: ONNX_MODEL_TYPE
+          value: yolo26
+        - name: HF_HOME
+          value: /cache/huggingface
+        - name: HF_HUB_OFFLINE
+          value: '1'
+        - name: HOME
+          value: /tmp
+        - name: USER
+          value: hosting
+        - name: TORCHINDUCTOR_CACHE_DIR
+          value: /tmp/torch-inductor
+        - name: TFLITE_MODEL_PATH
+          value: /cache/huggingface/hosting-tflite/ssd_mobilenet_v1.tflite
+        - name: TFLITE_LABELS_PATH
+          value: /cache/huggingface/hosting-tflite/labelmap.txt
+        volumeMounts:
         - name: hf-cache
-          persistentVolumeClaim:
-            claimName: huggingface-cache
-
+          mountPath: /cache/huggingface
+        - name: launcher
+          mountPath: /hosting
+          readOnly: true
+        resources:
+          requests:
+            cpu: 1200m
+            memory: 1500Mi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+        startupProbe:
+          httpGet:
+            path: /__hosting/health
+            port: 8000
+          timeoutSeconds: 4
+          periodSeconds: 5
+          failureThreshold: 90
+        readinessProbe:
+          httpGet:
+            path: /__hosting/health
+            port: 8000
+          timeoutSeconds: 4
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 5
+        command:
+        - python
+        - -B
+        - /hosting/launcher.py
+      volumes:
+      - name: hf-cache
+        persistentVolumeClaim:
+          claimName: huggingface-cache
+      - name: launcher
+        configMap:
+          name: object-detection-launcher
+      nodeSelector:
+        opensensor.io/node-class: core

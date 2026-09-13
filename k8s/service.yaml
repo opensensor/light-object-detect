@@ -9,10 +9,9 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: light-object-detect
+    app: object-detection-gateway
   ports:
-    - name: http
-      port: 8000
-      targetPort: 8000
-      protocol: TCP
-
+  - name: http
+    port: 8000
+    targetPort: 8080
+    protocol: TCP

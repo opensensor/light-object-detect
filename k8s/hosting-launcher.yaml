@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: object-detection-launcher
+  namespace: light-object-detect
+data:
+  launcher.py: "\"\"\"Expose model readiness around the unchanged, pinned application\
+    \ image.\"\"\"\nimport sys\n\nsys.path.insert(0, '/app')\n\nimport uvicorn\nfrom\
+    \ fastapi.responses import JSONResponse\nfrom main import app\nfrom backends.factory\
+    \ import _backend_instances\n\n\n@app.get('/__hosting/health', include_in_schema=False)\n\
+    async def hosting_health():\n    detector = _backend_instances.get('onnx')\n \
+    \   ready = detector is not None and getattr(detector, 'session', None) is not\
+    \ None\n    return JSONResponse({'status': 'ok' if ready else 'unavailable'},\n\
+    \                        status_code=200 if ready else 503,\n                \
+    \        headers={'Cache-Control': 'no-store'})\n\n\nif __name__ == '__main__':\n\
+    \    uvicorn.run(app, host='0.0.0.0', port=8000)\n"
