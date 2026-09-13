@@ -43,7 +43,13 @@ class ONNXBackend(DetectionBackend):
         if 'CUDAExecutionProvider' in ort.get_available_providers():
             providers.insert(0, 'CUDAExecutionProvider')
         
-        self.session = ort.InferenceSession(model_path, providers=providers)
+        # Bound pools independently of the host topology visible through a CPU quota.
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = int(os.environ.get("ONNX_INTRA_OP_THREADS", "2"))
+        options.inter_op_num_threads = 1
+        options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        options.add_session_config_entry("session.inter_op.allow_spinning", "0")
+        self.session = ort.InferenceSession(model_path, sess_options=options, providers=providers)
         
         # Get model input/output details
         self.input_name = self.session.get_inputs()[0].name
