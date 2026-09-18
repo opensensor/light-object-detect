@@ -342,7 +342,7 @@ OpenVINO sees no GPU and silently uses the CPU device.
 Startup logs which providers the session actually got, and which OpenVINO
 devices it can see:
 ```
-ONNX: session for backends/onnx/models/yolo11n.onnx using providers ['OpenVINOExecutionProvider', 'CPUExecutionProvider']
+ONNX: session for backends/onnx/models/yolo26n-distill.onnx using providers ['OpenVINOExecutionProvider', 'CPUExecutionProvider']
 ONNX: OpenVINO devices visible: ['CPU', 'GPU']
 ```
 

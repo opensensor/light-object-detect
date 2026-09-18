@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     TFLITE_CONFIDENCE_THRESHOLD: float = 0.5
 
     # ONNX settings
-    ONNX_MODEL_PATH: str = "backends/onnx/models/yolo11n.onnx"
+    ONNX_MODEL_PATH: str = "backends/onnx/models/yolo26n-distill.onnx"
     ONNX_LABELS_PATH: str = "backends/onnx/models/coco.txt"
     ONNX_CONFIDENCE_THRESHOLD: float = 0.5
     ONNX_IOU_THRESHOLD: float = 0.45
-    ONNX_MODEL_TYPE: str = "yolo11"
+    ONNX_MODEL_TYPE: str = "yolo26"
 
     # Execution provider preference order, comma-separated. Accepts the short
     # aliases 'cuda', 'openvino' and 'cpu' or full ONNX Runtime provider names.
