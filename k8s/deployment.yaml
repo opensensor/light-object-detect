@@ -25,7 +25,7 @@ spec:
       - name: whitewhale
       containers:
       - name: light-object-detect
-        image: ghcr.io/opensensor/light-object-detect@sha256:ce8010794ecd286f82bc2cbb44b7ece12169d122018fe26b7f96408a3efd8a1f
+        image: ghcr.io/opensensor/light-object-detect@sha256:d57cef3b12fc3308b79cddf81ac2988c002372134a0c388f6e54913c8c861644
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
@@ -35,7 +35,7 @@ spec:
         - name: LOG_LEVEL
           value: INFO
         - name: ONNX_MODEL_PATH
-          value: backends/onnx/models/yolo26n.onnx
+          value: backends/onnx/models/yolo26n-distill.onnx
         - name: ONNX_MODEL_TYPE
           value: yolo26
         - name: HF_HOME
