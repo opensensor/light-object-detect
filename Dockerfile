@@ -44,6 +44,7 @@ ARG ONNXRUNTIME_PACKAGE=onnxruntime
 COPY Pipfile Pipfile.lock ./
 RUN python -m pip install --upgrade pip \
     && python -m pip install \
+        sentry-sdk==2.73.0 \
         fastapi \
         uvicorn \
         python-multipart \
@@ -101,4 +102,10 @@ RUN if [ "$DOWNLOAD_DEFAULT_MODEL" = "1" ]; then python scripts/download_model.p
 EXPOSE 8000
 
 # .env is optional; Unraid can mount it to /app/.env
+# Public Sentry ingestion key; upload credentials are never part of the image.
+ARG SENTRY_RELEASE
+ENV SENTRY_DSN=https://8bd44d815901211012fcae52d51371f9@o4512337837686784.ingest.us.sentry.io/4512337894703104 \
+    SENTRY_ENVIRONMENT=production \
+    SENTRY_RELEASE=${SENTRY_RELEASE}
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

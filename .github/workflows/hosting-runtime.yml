@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - k8s/local-hosting/**
+      - observability.py
+      - main.py
       - .github/workflows/hosting-runtime.yml
   workflow_dispatch: {}
 
@@ -27,6 +29,8 @@ jobs:
         with:
           context: .
           file: k8s/local-hosting/Dockerfile
+          build-args: |
+            SENTRY_RELEASE=light-object-detect@${{ github.sha }}
           platforms: linux/amd64
           push: true
           tags: ghcr.io/opensensor/light-object-detect:hosting-${{ github.sha }}

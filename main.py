@@ -9,6 +9,10 @@ from config import settings
 from backends.factory import get_backend
 from utils.model_download import ensure_tflite_ssd_mobilenet_v1, ModelDownloadError
 
+from observability import init_sentry
+
+init_sentry()
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
