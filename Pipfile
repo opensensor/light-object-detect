@@ -4,6 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+sentry-sdk = "==2.73.0"
 fastapi = "*"
 uvicorn = "*"
 python-multipart = "*"
