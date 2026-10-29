@@ -1,0 +1,17 @@
+name: Backend metadata regression
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install 'numpy<2' tflite-runtime==2.14.0 fastapi pillow
+      - run: python -m unittest discover -s tests -p test_backend_model_info.py -v
