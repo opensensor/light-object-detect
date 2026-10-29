@@ -273,7 +273,7 @@ class TFLiteBackend(DetectionBackend):
             "backend": "tflite",
             "model_path": self.model_path,
             "labels_path": self.labels_path,
-            "input_shape": list(self.input_shape),
+            "input_shape": [int(dimension) for dimension in self.input_shape],
             "num_labels": len(self.labels),
             "default_confidence_threshold": self.confidence_threshold
         }
