@@ -8,6 +8,7 @@ RUN python -c 'from backends.onnx.backend import ONNXBackend; from PIL import Im
 
 RUN python -m pip install --no-cache-dir sentry-sdk==2.73.0
 COPY observability.py main.py /app/
+COPY utils/model_download.py /app/utils/model_download.py
 ARG SENTRY_RELEASE
 ENV SENTRY_DSN=https://8bd44d815901211012fcae52d51371f9@o4512337837686784.ingest.us.sentry.io/4512337894703104 \
     SENTRY_ENVIRONMENT=production \

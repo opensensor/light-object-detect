@@ -143,7 +143,7 @@ def ensure_tflite_ssd_mobilenet_v1(
     model_file.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with tempfile.TemporaryDirectory(prefix="light-object-detect-") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix=".light-object-detect-", dir=model_file.parent) as tmpdir:
             tmp_dir = Path(tmpdir)
             zip_dest = tmp_dir / "model.zip"
 
@@ -169,7 +169,7 @@ def ensure_tflite_ssd_mobilenet_v1(
             if not extracted_path.exists():
                 raise ModelDownloadError("Extraction succeeded but file is missing on disk.")
 
-            # Atomic-ish replace
+            # Staging and destination share a filesystem, so replacement is atomic.
             tmp_model = tmp_dir / "detect.tmp.tflite"
             tmp_model.write_bytes(extracted_path.read_bytes())
             tmp_model.replace(model_file)
