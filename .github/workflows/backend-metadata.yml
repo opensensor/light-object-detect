@@ -15,3 +15,7 @@ jobs:
           python-version: '3.11'
       - run: pip install 'numpy<2' tflite-runtime==2.14.0 fastapi pillow
       - run: python -m unittest discover -s tests -p test_backend_model_info.py -v
+      - name: Install API startup test dependencies
+        run: pip install pydantic-settings uvicorn httpx python-multipart shapely sentry-sdk
+      - name: Verify default readiness and lazy optional engines
+        run: python -m unittest discover -s tests -p test_startup.py -v
