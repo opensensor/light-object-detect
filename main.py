@@ -7,7 +7,7 @@ from typing import List, Optional
 from api.router import router as api_router
 from config import settings
 from backends.factory import get_backend
-from utils.model_download import ensure_tflite_ssd_mobilenet_v1, ModelDownloadError
+from utils.model_download import ensure_tflite_ssd_mobilenet_v1
 
 from observability import init_sentry
 
@@ -35,33 +35,25 @@ async def startup_event():
     logger.info(f"Available backends: {settings.AVAILABLE_BACKENDS}")
     logger.info(f"Default backend: {settings.DEFAULT_BACKEND}")
 
-    # Ensure the default TFLite model is present if TFLite is enabled.
-    # This keeps the out-of-the-box experience working, while still allowing
-    # users to override paths via .env.
-    if "tflite" in settings.AVAILABLE_BACKENDS:
-        try:
-            ensure_result = ensure_tflite_ssd_mobilenet_v1(
-                model_path=settings.TFLITE_MODEL_PATH,
-                labels_path=settings.TFLITE_LABELS_PATH,
-                force=False,
-            )
-            if ensure_result.did_download:
-                logger.info(f"✓ Downloaded default TFLite model: {ensure_result.message}")
-        except ModelDownloadError as e:
-            logger.error(
-                "✗ TFLite model is missing and could not be downloaded. "
-                f"Reason: {e}. "
-                "Fix: run 'python scripts/download_model.py' or set TFLITE_MODEL_PATH to an existing model."
-            )
+    # Optional engines stay lazy: their models, runtimes or hardware may not
+    # exist on this host. The configured default must actually initialize before
+    # the application can start accepting requests (including /health).
+    backend_name = settings.DEFAULT_BACKEND
+    if backend_name not in settings.AVAILABLE_BACKENDS:
+        raise ValueError("DEFAULT_BACKEND must be included in AVAILABLE_BACKENDS")
+    if backend_name == "tflite":
+        ensure_result = ensure_tflite_ssd_mobilenet_v1(
+            model_path=settings.TFLITE_MODEL_PATH,
+            labels_path=settings.TFLITE_LABELS_PATH,
+            force=False,
+        )
+        if ensure_result.did_download:
+            logger.info("Downloaded default TFLite model: %s", ensure_result.message)
 
-    # Test each backend
-    for backend_name in settings.AVAILABLE_BACKENDS:
-        try:
-            detector = get_backend(backend_name)
-            model_info = detector.get_model_info()
-            logger.info(f"✓ {backend_name.upper()} backend: {model_info.get('model_path', 'N/A')}")
-        except Exception as e:
-            logger.error(f"✗ {backend_name.upper()} backend failed: {str(e)}")
+    detector = get_backend(backend_name)
+    model_info = detector.get_model_info()
+    logger.info("Default %s backend ready: %s", backend_name.upper(),
+                model_info.get("model_path", "N/A"))
 
     logger.info("=" * 60)
 

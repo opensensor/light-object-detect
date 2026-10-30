@@ -2,6 +2,13 @@
 
 A lightweight Python API for object detection with pluggable backends. This API allows you to detect objects in images using different detection backends, starting with TensorFlow Lite.
 
+The API initializes `DEFAULT_BACKEND` before accepting requests and fails startup
+if its model or runtime is unavailable. Other backends initialize on demand;
+listing them in `AVAILABLE_BACKENDS` does not require installing every optional
+model, runtime, or accelerator. Requests for an optional backend still require its
+corresponding model and dependencies. For optional TFLite use, provision the model
+with `python scripts/download_model.py` or configure an existing model path.
+
 ## Features
 
 - FastAPI-based REST API for object detection
@@ -33,7 +40,7 @@ A lightweight Python API for object detection with pluggable backends. This API 
    pipenv run python scripts/download_model.py
    ```
 
-   If you skip this step, the API will try to download the default model on startup when the `tflite` backend is enabled (requires internet access). Docker builds download the default model by default.
+   If you skip this step, the API will try to download the default model on startup when `DEFAULT_BACKEND=tflite` (requires internet access). Docker builds download the default model by default.
 
 ## Usage
 
