@@ -1,0 +1,12 @@
+[Unit]
+Description=Deploy latest main detector build to production and recovery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/bash %h/.local/lib/opensensor-hosting/detector-release-launch.sh
+TimeoutStartSec=35min
+UMask=0077
+Nice=5
