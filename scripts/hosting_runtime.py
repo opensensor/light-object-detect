@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import time
 import urllib.request
+import urllib.error
 
 import shlex
 
@@ -48,7 +49,10 @@ def owned(revision):
 def wait(label, function, seconds=600):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
-        if function():print(label, flush=True);return
+        try:
+            if function():print(label, flush=True);return
+        except (urllib.error.URLError, TimeoutError):
+            pass  # Health probes can fail while gateway endpoints are changing.
         time.sleep(3)
     raise RuntimeError('Timed out: ' + label)
 
@@ -122,7 +126,7 @@ def deploy(target, directory):
             raise RuntimeError('Another operator owns detector placement')
         changes=[{'op':'test','path':'/data','value':current}]
         changes += [{'op':'add','path':'/data/'+key,'value':str(value)}
-                    for key,value in {**values,'revision':revision}.items()]
+                    for key,value in values.items()]
         run('cloud',['patch','cm','object-detection-placement','-n',NS,
                      '--type=json','--patch-file=/dev/stdin'],json.dumps(changes))
     def warm():

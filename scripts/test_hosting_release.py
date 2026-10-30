@@ -1,6 +1,7 @@
 import copy
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +17,14 @@ WORKFLOW = dict(event='push',head_branch='main',path=agent.WORKFLOW,
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_health_probe_retries_transient_502_but_not_configuration_errors(self):
+        with patch.object(runtime.time,'sleep'), patch.object(runtime.time,'monotonic',side_effect=[0,1,2]):
+            probe=unittest.mock.Mock(side_effect=[urllib.error.HTTPError('https://example.invalid',502,'gateway',{},None),True])
+            runtime.wait('Recovered health probe',probe,10)
+            self.assertEqual(probe.call_count,2)
+        with self.assertRaises(ValueError):
+            runtime.wait('Invalid deployment',unittest.mock.Mock(side_effect=ValueError('configuration changed')),10)
+
     def test_artifact_must_belong_to_exact_main_run(self):
         self.assertEqual(agent.validate(TARGET,WORKFLOW),TARGET)
         for key,value in [('run_id',99),('run_attempt',2),('commit','c'*40),
@@ -56,6 +65,26 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse(ready([{'metadata':{},'status':{}}]))
         terminating=copy.deepcopy(pod);terminating['metadata']['deletionTimestamp']='now'
         self.assertFalse(ready([pod,terminating]))
+
+    def test_warmup_preserves_the_admitted_placement_revision(self):
+        class StopAfterWarmIntent(Exception):pass
+        data={'desired':'local','release_hold':'','revision':'admitted'}
+        def get(site,*args):
+            if args[1]=='cm':return {'data':dict(data)}
+            if args[2]=='forms-hosting-gateway':
+                return {'spec':{'template':{'spec':{'containers':[{'name':'controller','env':[{'name':'EXPECTED_IMAGE','value':IMAGE}]}]}}}}
+            return {'spec':{'strategy':{'type':'Recreate'},'template':{'spec':{'containers':[{'image':IMAGE}]}}}}
+        def run(site,args,body=None):
+            for operation in __import__('json').loads(body):
+                if operation['op']=='add':data[operation['path'].split('/')[-1]]=operation['value']
+            return ''
+        with tempfile.TemporaryDirectory() as tmp, patch.object(runtime,'get',side_effect=get), \
+                patch.object(runtime,'run',side_effect=run), \
+                patch.object(runtime,'ready',side_effect=StopAfterWarmIntent):
+            with self.assertRaises(StopAfterWarmIntent):runtime.deploy(TARGET,Path(tmp))
+        self.assertEqual(data['revision'],'admitted')
+        self.assertEqual(data['desired'],'local')
+        self.assertGreater(float(data['recovery_test_until']),0)
 
     def test_resumed_release_does_not_overwrite_operator_hold(self):
         with tempfile.TemporaryDirectory() as tmp:
