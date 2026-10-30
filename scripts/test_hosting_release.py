@@ -1,6 +1,7 @@
 import copy
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +17,14 @@ WORKFLOW = dict(event='push',head_branch='main',path=agent.WORKFLOW,
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_health_probe_retries_transient_502_but_not_configuration_errors(self):
+        with patch.object(runtime.time,'sleep'), patch.object(runtime.time,'monotonic',side_effect=[0,1,2]):
+            probe=unittest.mock.Mock(side_effect=[urllib.error.HTTPError('https://example.invalid',502,'gateway',{},None),True])
+            runtime.wait('Recovered health probe',probe,10)
+            self.assertEqual(probe.call_count,2)
+        with self.assertRaises(ValueError):
+            runtime.wait('Invalid deployment',unittest.mock.Mock(side_effect=ValueError('configuration changed')),10)
+
     def test_artifact_must_belong_to_exact_main_run(self):
         self.assertEqual(agent.validate(TARGET,WORKFLOW),TARGET)
         for key,value in [('run_id',99),('run_attempt',2),('commit','c'*40),
