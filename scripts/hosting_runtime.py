@@ -126,7 +126,7 @@ def deploy(target, directory):
             raise RuntimeError('Another operator owns detector placement')
         changes=[{'op':'test','path':'/data','value':current}]
         changes += [{'op':'add','path':'/data/'+key,'value':str(value)}
-                    for key,value in {**values,'revision':revision}.items()]
+                    for key,value in values.items()]
         run('cloud',['patch','cm','object-detection-placement','-n',NS,
                      '--type=json','--patch-file=/dev/stdin'],json.dumps(changes))
     def warm():
