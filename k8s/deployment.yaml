@@ -21,11 +21,18 @@ spec:
       annotations:
         hosting.opensensor.io/launcher-sha256: 5e3bfc417b37dc760fa2ac9b67e36067f32210a53024af8327f73f0cf6eb07f6
     spec:
+      automountServiceAccountToken: false
       imagePullSecrets:
       - name: whitewhale
       containers:
       - name: light-object-detect
         image: ghcr.io/opensensor/light-object-detect@sha256:d57cef3b12fc3308b79cddf81ac2988c002372134a0c388f6e54913c8c861644
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
