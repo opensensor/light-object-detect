@@ -7,8 +7,9 @@ from config import settings
 try:
     from backends.tflite.backend import TFLiteBackend
     TFLITE_AVAILABLE = True
-except ImportError:
+except ImportError as exc:
     TFLITE_AVAILABLE = False
+    TFLITE_IMPORT_ERROR = exc
 
 try:
     from backends.onnx.backend import ONNXBackend
@@ -75,6 +76,11 @@ def get_backend(backend_name: str) -> DetectionBackend:
         return _backend_instances[backend_name]
 
     if backend_name not in BACKEND_REGISTRY:
+        if backend_name == "tflite" and not TFLITE_AVAILABLE:
+            raise ValueError(
+                f"TFLite backend unavailable: {TFLITE_IMPORT_ERROR}. "
+                "Install a TFLite interpreter in the server environment."
+            ) from TFLITE_IMPORT_ERROR
         raise ValueError(f"Backend '{backend_name}' not found. Available backends: {list(BACKEND_REGISTRY.keys())}")
 
     backend_class = BACKEND_REGISTRY[backend_name]

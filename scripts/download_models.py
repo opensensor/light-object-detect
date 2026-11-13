@@ -115,7 +115,7 @@ def main():
         print(f"\nModel: {model_file}")
         print(f"Labels: {labels_file}")
         print("\nUpdate your .env file with:")
-        print(f"BACKEND=onnx")
+        print(f"DEFAULT_BACKEND=onnx")
         print(f"ONNX_MODEL_PATH={model_file}")
         print(f"ONNX_LABELS_PATH={labels_file}")
         print(f"ONNX_MODEL_TYPE=yolov8")

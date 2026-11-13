@@ -19,20 +19,20 @@ with `python scripts/download_model.py` or configure an existing model path.
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.13 for the Pipfile installation; the Docker image uses Python 3.11
 - pipenv (for dependency management)
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/light-object-detect.git
+   git clone https://github.com/opensensor/light-object-detect.git
    cd light-object-detect
    ```
 
 2. Install dependencies:
    ```bash
-   pipenv install
+   pipenv sync
    ```
 
 3. (Optional) Pre-download the default TFLite model:
@@ -40,7 +40,7 @@ with `python scripts/download_model.py` or configure an existing model path.
    pipenv run python scripts/download_model.py
    ```
 
-   If you skip this step, the API will try to download the default model on startup when `DEFAULT_BACKEND=tflite` (requires internet access). Docker builds download the default model by default.
+   If you skip this step, the API will try to download the default model on startup when `DEFAULT_BACKEND=tflite` (requires internet access). Docker builds only download it when `DOWNLOAD_DEFAULT_MODEL=1` is passed.
 
 ## Usage
 
@@ -51,12 +51,39 @@ with `python scripts/download_model.py` or configure an existing model path.
    
    Or manually with uvicorn:
    ```bash
-   pipenv run uvicorn main:app --reload --port 9001
+   pipenv run uvicorn main:app --reload --host 0.0.0.0 --port 9001
    ```
 
 2. The API will be available at http://localhost:9001
 
 3. Access the API documentation at http://localhost:9001/docs
+
+For access from another computer, use `http://<server-ip>:9001/docs` and
+allow TCP port 9001 through the server's firewall. The `--host 0.0.0.0`
+option above is required for remote access with Uvicorn.
+
+If installation fails with `No space left on device` while downloading a
+package, check the space on the temporary filesystem (`df -h /tmp`). On
+systems with a small `/tmp`, use a directory on the disk for temporary files:
+
+```bash
+mkdir -p "$HOME/pipenv_tmp"
+TMPDIR="$HOME/pipenv_tmp" pipenv sync
+```
+
+The Pipfile includes TensorFlow and PyTorch, so a full local installation
+requires substantial disk space and memory. `pipenv sync` uses the committed
+lockfile without resolving it again. If the process exits with `Illegal
+instruction`, try each native import separately to identify which package
+crashes:
+
+```bash
+pipenv run python -X faulthandler -c 'import tensorflow'
+pipenv run python -X faulthandler -c 'import onnxruntime'
+```
+
+Include the output and `lscpu` details in a bug report. The Pydantic schema warning
+was fixed in the project models; it was separate from that process crash.
 
 ## Docker (e.g. Unraid / lightNVR)
 
@@ -66,8 +93,11 @@ with `python scripts/download_model.py` or configure an existing model path.
 docker build -t light-object-detect:local .
 ```
 
-By default, the image downloads a small reference TFLite model at build time so the `tflite` backend works out of the box.
-To disable this, build with `--build-arg DOWNLOAD_DEFAULT_MODEL=0`.
+The image installs `tflite-runtime`, but does not bake in a model by default.
+To include the reference model, build with `--build-arg DOWNLOAD_DEFAULT_MODEL=1`.
+TensorFlow is optional (`--build-arg INSTALL_TENSORFLOW=1`) and is not needed
+for the default TFLite runtime. Set `DEFAULT_BACKEND=tflite` to select it by
+default, or pass `?backend=tflite` for a single request.
 
 ### Run
 

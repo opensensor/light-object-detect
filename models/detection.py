@@ -30,7 +30,7 @@ class DetectionResult(BaseModel):
     zone_id: Optional[str] = Field(None, description="Zone ID if detection is within a defined zone")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "label": "person",
                 "confidence": 0.92,
@@ -65,7 +65,7 @@ class DetectionResponse(BaseModel):
     image: Optional[ImageResponse] = Field(None, description="Image with bounding boxes (if requested)")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "backend": "tflite",
                 "filename": "example.jpg",

@@ -11,7 +11,7 @@ class Point2D(BaseModel):
     y: float = Field(..., description="Normalized y coordinate (0-1)", ge=0.0, le=1.0)
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "x": 0.5,
                 "y": 0.5
@@ -111,7 +111,7 @@ class DetectionZone(BaseModel):
             raise ValueError(f"Invalid mode: {mode}. Must be 'center', 'any', or 'all'")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": "zone1",
                 "name": "Entrance Area",
@@ -168,7 +168,7 @@ class ZoneConfiguration(BaseModel):
         return None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "zones": [
                     {

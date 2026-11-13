@@ -94,7 +94,7 @@ RUN if [ "$INSTALL_MOONDREAM" = "1" ]; then \
 
 COPY . .
 
-# Optionally bake the TFLite model (only useful if tensorflow is installed)
+# Optionally bake the TFLite model for the default tflite-runtime interpreter
 # Usage: docker build --build-arg DOWNLOAD_DEFAULT_MODEL=1 ...
 ARG DOWNLOAD_DEFAULT_MODEL=0
 RUN if [ "$DOWNLOAD_DEFAULT_MODEL" = "1" ]; then python scripts/download_model.py; fi

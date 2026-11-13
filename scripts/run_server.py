@@ -3,15 +3,13 @@
 Script to run the object detection API server.
 """
 
-import os
-import sys
 import argparse
+import sys
 import uvicorn
 from pathlib import Path
 
-# Add parent directory to path to import app
+# Resolve main:app when this script is launched by path from any directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from main import app
 
 
 def main():

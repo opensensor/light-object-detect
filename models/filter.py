@@ -23,7 +23,7 @@ class FilterRule(BaseModel):
     value: Any = Field(..., description="Value to compare against")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "field": "label",
                 "operator": "in",
@@ -46,7 +46,7 @@ class FilterGroup(BaseModel):
         return v.upper()
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "logic": "AND",
                 "rules": [
@@ -103,7 +103,7 @@ class EventFilter(BaseModel):
         return None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "enabled": True,
                 "person_only": True,
@@ -127,7 +127,7 @@ class DetectionEvent(BaseModel):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "event_id": "evt_123456",
                 "timestamp": 1699200000.0,

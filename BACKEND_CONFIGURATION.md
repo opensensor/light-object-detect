@@ -74,7 +74,7 @@ The API can be configured via environment variables or query parameters.
 
 **For TFLite:**
 ```bash
-BACKEND=tflite
+DEFAULT_BACKEND=tflite
 TFLITE_MODEL_PATH=backends/tflite/models/ssd_mobilenet_v1.tflite
 TFLITE_LABELS_PATH=backends/tflite/models/coco_labels.txt
 TFLITE_CONFIDENCE_THRESHOLD=0.5
@@ -82,7 +82,7 @@ TFLITE_CONFIDENCE_THRESHOLD=0.5
 
 **For ONNX:**
 ```bash
-BACKEND=onnx
+DEFAULT_BACKEND=onnx
 ONNX_MODEL_PATH=models/yolov8n.onnx
 ONNX_LABELS_PATH=models/coco_labels.txt
 ONNX_CONFIDENCE_THRESHOLD=0.5
@@ -92,7 +92,7 @@ ONNX_MODEL_TYPE=yolov8
 
 **For OpenCV:**
 ```bash
-BACKEND=opencv
+DEFAULT_BACKEND=opencv
 OPENCV_MODEL_PATH=models/yolov4-tiny.weights
 OPENCV_CONFIG_PATH=models/yolov4-tiny.cfg
 OPENCV_LABELS_PATH=models/coco_labels.txt

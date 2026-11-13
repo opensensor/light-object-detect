@@ -14,8 +14,8 @@
 ```bash
 cd /home/matteius/lightNVR/light-object-detect
 
-# Install all dependencies using pipenv
-pipenv install
+# Install all locked dependencies using pipenv
+pipenv sync
 
 # This will install:
 # - fastapi, uvicorn (API server)
@@ -107,7 +107,7 @@ cd ..
 
 # Configure for OpenCV backend
 cat > .env << EOF
-BACKEND=opencv
+DEFAULT_BACKEND=opencv
 OPENCV_MODEL_PATH=models/yolov4-tiny.weights
 OPENCV_CONFIG_PATH=models/yolov4-tiny.cfg
 OPENCV_LABELS_PATH=models/coco_labels.txt
@@ -123,7 +123,7 @@ If you already have a TFLite model:
 ```bash
 # Configure for TFLite backend
 cat > .env << EOF
-BACKEND=tflite
+DEFAULT_BACKEND=tflite
 TFLITE_MODEL_PATH=models/detect.tflite
 TFLITE_LABELS_PATH=models/labelmap.txt
 TFLITE_CONFIDENCE_THRESHOLD=0.5
@@ -136,7 +136,7 @@ If you downloaded the ONNX model (recommended):
 
 ```bash
 cat > .env << EOF
-BACKEND=onnx
+DEFAULT_BACKEND=onnx
 ONNX_MODEL_PATH=models/yolov8n.onnx
 ONNX_LABELS_PATH=models/coco_labels.txt
 ONNX_CONFIDENCE_THRESHOLD=0.5
@@ -213,7 +213,7 @@ make
 cd /home/matteius/lightNVR/light-object-detect
 
 # 1. Install dependencies
-pipenv install
+pipenv sync
 
 # 2. Install ultralytics and download model
 pip install ultralytics
@@ -221,7 +221,7 @@ python3 -c "from ultralytics import YOLO; import shutil; from pathlib import Pat
 
 # 3. Configure
 cat > .env << EOF
-BACKEND=onnx
+DEFAULT_BACKEND=onnx
 ONNX_MODEL_PATH=models/yolov8n.onnx
 ONNX_LABELS_PATH=models/coco_labels.txt
 ONNX_CONFIDENCE_THRESHOLD=0.5

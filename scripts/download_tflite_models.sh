@@ -229,7 +229,7 @@ if [ -f "$OUTPUT_FILE" ]; then
     echo ""
     echo "To use this model, configure your light-object-detect API:"
     echo ""
-    echo "  BACKEND=tflite"
+    echo "  DEFAULT_BACKEND=tflite"
     echo "  TFLITE_MODEL_PATH=$OUTPUT_FILE"
     echo "  TFLITE_LABELS_PATH=$MODEL_DIR/coco_labels.txt"
     echo "  TFLITE_CONFIDENCE_THRESHOLD=0.5"

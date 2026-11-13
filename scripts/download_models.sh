@@ -168,7 +168,7 @@ else
         echo "  Save to: $MODEL_DIR/yolov8${MODEL_SIZE}.onnx"
         echo ""
         echo "Method 3: Use TFLite backend (already included)"
-        echo "  Set BACKEND=tflite in your .env file"
+        echo "  Set DEFAULT_BACKEND=tflite in your .env file"
         echo ""
         exit 1
     fi
@@ -192,7 +192,7 @@ if [ -f "$ONNX_FILE" ]; then
     echo "Labels: $MODEL_DIR/coco_labels.txt"
     echo ""
     echo "Update your .env file with:"
-    echo "  BACKEND=onnx"
+    echo "  DEFAULT_BACKEND=onnx"
     echo "  ONNX_MODEL_PATH=$ONNX_FILE"
     echo "  ONNX_LABELS_PATH=$MODEL_DIR/coco_labels.txt"
     echo "  ONNX_MODEL_TYPE=yolov8"

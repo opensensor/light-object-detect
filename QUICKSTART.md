@@ -8,7 +8,7 @@ This guide will help you get started with the enhanced light-object-detect API.
 
 ```bash
 cd light-object-detect
-pipenv install
+pipenv sync
 ```
 
 ### 2. Download Models
@@ -21,7 +21,7 @@ The TFLite backend uses TensorFlow Lite for efficient inference on CPU. It's lig
 
 **Install dependencies:**
 ```bash
-pipenv install  # Installs TensorFlow which includes TFLite
+pipenv sync  # Installs TensorFlow which includes TFLite
 ```
 
 **Download the model:**
@@ -37,14 +37,18 @@ bash scripts/download_tflite_models.sh --model-type ssd_mobilenet_v1
 **Configure:**
 ```bash
 cat > .env << EOF
-BACKEND=tflite
+DEFAULT_BACKEND=tflite
 TFLITE_MODEL_PATH=backends/tflite/models/ssd_mobilenet_v1.tflite
 TFLITE_LABELS_PATH=backends/tflite/models/coco_labels.txt
 TFLITE_CONFIDENCE_THRESHOLD=0.5
 EOF
 ```
 
-**Note:** We use TensorFlow (which includes TFLite) instead of the deprecated `tflite-runtime` package. The backend automatically uses TensorFlow's TFLite interpreter. You may see a deprecation warning about migrating to `ai-edge-litert`, but this can be ignored for now as the new package doesn't support Python 3.12+.
+**Note:** The Docker image includes the smaller `tflite-runtime` package and
+prefers it for TFLite inference. A local Pipenv installation includes
+TensorFlow. In Docker, set `DEFAULT_BACKEND=tflite` and either bake in the
+reference model with `--build-arg DOWNLOAD_DEFAULT_MODEL=1` or provide an
+existing model at `TFLITE_MODEL_PATH`.
 
 #### Option B: Download YOLOv8 ONNX Model (Recommended for Best Performance)
 
@@ -89,7 +93,7 @@ Then configure:
 
 ```bash
 cat > .env << EOF
-BACKEND=onnx
+DEFAULT_BACKEND=onnx
 ONNX_MODEL_PATH=models/yolov8n.onnx
 ONNX_LABELS_PATH=models/coco_labels.txt
 ONNX_CONFIDENCE_THRESHOLD=0.5
@@ -121,7 +125,7 @@ Configure:
 
 ```bash
 cat > .env << EOF
-BACKEND=opencv
+DEFAULT_BACKEND=opencv
 OPENCV_MODEL_PATH=models/yolov4-tiny.weights
 OPENCV_CONFIG_PATH=models/yolov4-tiny.cfg
 OPENCV_LABELS_PATH=models/coco_labels.txt

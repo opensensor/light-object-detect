@@ -4,24 +4,21 @@ from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 try:
-    # Try to import from TensorFlow first (most compatible)
-    import tensorflow as tf
-    Interpreter = tf.lite.Interpreter
+    # Prefer the small runtime on constrained hosts; TensorFlow is a fallback.
+    from tflite_runtime.interpreter import Interpreter
 except ImportError:
     try:
-        # Fall back to ai_edge_litert (new LiteRT package, Python 3.8-3.11 only)
         from ai_edge_litert.interpreter import Interpreter
     except ImportError:
         try:
-            # Last resort: tflite_runtime (deprecated)
-            import tflite_runtime.interpreter as tflite
-            Interpreter = tflite.Interpreter
+            import tensorflow as tf
+            Interpreter = tf.lite.Interpreter
         except ImportError:
             raise ImportError(
                 "No TFLite interpreter found. Please install one of:\n"
-                "  pip install tensorflow  (recommended - includes TFLite)\n"
-                "  pip install ai-edge-litert  (new LiteRT, Python 3.8-3.11)\n"
-                "  pip install tflite-runtime  (lightweight, deprecated)"
+                "  pip install tflite-runtime  (lightweight, Python 3.11)\n"
+                "  pip install ai-edge-litert  (Python 3.8-3.11)\n"
+                "  pip install tensorflow  (includes TFLite)"
             )
 
 from backends.base import DetectionBackend
