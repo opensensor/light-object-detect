@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Light Object Detection API",
     description="A lightweight API for object detection with pluggable backends",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 @app.on_event("startup")
