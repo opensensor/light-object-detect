@@ -9,6 +9,7 @@ Based on Frigate's edgetpu_tfl.py implementation.
 import os
 import math
 import logging
+import ctypes
 from typing import List, Dict, Any, Optional, Tuple
 
 import numpy as np
@@ -31,15 +32,17 @@ try:
     TFLITE_SOURCE = "tflite_runtime"
 except ModuleNotFoundError:
     try:
-        from tensorflow.lite.python.interpreter import Interpreter, load_delegate
-        TFLITE_SOURCE = "tensorflow"
+        from ai_edge_litert.interpreter import Interpreter, load_delegate
+        TFLITE_SOURCE = "ai_edge_litert"
     except ModuleNotFoundError:
-        raise ImportError(
-            "No TFLite interpreter found. Please install one of:\n"
-            "  pip install tflite-runtime  (recommended for EdgeTPU)\n"
-            "  pip install tensorflow\n"
-            "Also ensure libedgetpu is installed: apt install libedgetpu1-std"
-        )
+        try:
+            from tensorflow.lite.python.interpreter import Interpreter, load_delegate
+            TFLITE_SOURCE = "tensorflow"
+        except ModuleNotFoundError:
+            raise ImportError(
+                "No TFLite interpreter found. Install ai-edge-litert or tensorflow, "
+                "and ensure libedgetpu is installed."
+            )
 
 
 class EdgeTPUBackend(DetectionBackend):
@@ -122,7 +125,9 @@ class EdgeTPUBackend(DetectionBackend):
         try:
             device_type = device_config.get("device", "auto")
             logger.info(f"Attempting to load EdgeTPU as {device_type}")
-            
+            # LiteRT's delegate wrapper can fail during object finalization if
+            # the shared library is absent; check before constructing it.
+            ctypes.CDLL("libedgetpu.so.1.0")
             edge_tpu_delegate = load_delegate("libedgetpu.so.1.0", device_config)
             logger.info("EdgeTPU found and loaded successfully")
             
@@ -130,7 +135,7 @@ class EdgeTPUBackend(DetectionBackend):
                 model_path=self.model_path,
                 experimental_delegates=[edge_tpu_delegate],
             )
-        except ValueError as e:
+        except (ValueError, OSError) as e:
             if "edgetpu" in str(e).lower() or "delegate" in str(e).lower():
                 logger.error(
                     "No EdgeTPU was detected. Ensure:\n"

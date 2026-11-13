@@ -21,7 +21,7 @@ The TFLite backend uses TensorFlow Lite for efficient inference on CPU. It's lig
 
 **Install dependencies:**
 ```bash
-pipenv sync  # Installs TensorFlow which includes TFLite
+pipenv sync  # Installs LiteRT for TFLite models
 ```
 
 **Download the model:**
@@ -44,28 +44,27 @@ TFLITE_CONFIDENCE_THRESHOLD=0.5
 EOF
 ```
 
-**Note:** The Docker image includes the smaller `tflite-runtime` package and
-prefers it for TFLite inference. A local Pipenv installation includes
-TensorFlow. In Docker, set `DEFAULT_BACKEND=tflite` and either bake in the
+**Note:** The Docker and Pipenv installs include `ai-edge-litert` for TFLite
+inference. In Docker, set `DEFAULT_BACKEND=tflite` and either bake in the
 reference model with `--build-arg DOWNLOAD_DEFAULT_MODEL=1` or provide an
 existing model at `TFLITE_MODEL_PATH`.
 
-#### Option B: Download YOLOv8 ONNX Model (Recommended for Best Performance)
+#### Option B: Download YOLO26 ONNX Model (Default Backend)
 
 **Method 1: Using Python Script (Requires ultralytics package)**
 
 ```bash
-# Install ultralytics
-pip install ultralytics
+# Install model-export dependencies
+pipenv sync --dev
 
-# Download and export YOLOv8n model
-python3 scripts/download_models.py --model-size n --output-dir models
+# Download and export YOLO26n with the required NMS-free output
+pipenv run python scripts/download_models.py --family yolo26 --model-size n
 
-# Or for a larger, more accurate model:
-python3 scripts/download_models.py --model-size s --output-dir models
+# Or for a larger model:
+pipenv run python scripts/download_models.py --family yolo26 --model-size s
 ```
 
-**Method 2: Manual Download from Hugging Face**
+**Method 2: Legacy YOLOv8 Manual Download**
 
 1. Visit: https://huggingface.co/Ultralytics/YOLOv8/tree/main
 2. Download `yolov8n.onnx` (or yolov8s.onnx for better accuracy)
@@ -77,7 +76,7 @@ mkdir -p models
 bash scripts/download_models.sh --output-dir models
 ```
 
-**Method 3: Export from PyTorch**
+**Method 3: Legacy YOLOv8 Export from PyTorch**
 
 ```bash
 pip install ultralytics

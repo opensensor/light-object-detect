@@ -19,7 +19,7 @@ with `python scripts/download_model.py` or configure an existing model path.
 
 ## Requirements
 
-- Python 3.13 for the Pipfile installation; the Docker image uses Python 3.11
+- Python 3.14 for both the Pipfile installation and Docker image
 - pipenv (for dependency management)
 
 ## Installation
@@ -71,21 +71,57 @@ mkdir -p "$HOME/pipenv_tmp"
 TMPDIR="$HOME/pipenv_tmp" pipenv sync
 ```
 
-The Pipfile includes TensorFlow and PyTorch, so a full local installation
-requires substantial disk space and memory. `pipenv sync` uses the committed
-lockfile without resolving it again. If the process exits with `Illegal
-instruction`, try each native import separately to identify which package
-crashes:
+The base Pipfile installs ONNX Runtime and LiteRT. Ultralytics, PyTorch,
+Transformers, and Accelerate are installed for model authoring and Moondream
+with `pipenv sync --dev`.
+`pipenv sync` uses the committed lockfile without resolving it again. If the
+process exits with `Illegal instruction`, try the native imports separately:
 
 ```bash
-pipenv run python -X faulthandler -c 'import tensorflow'
 pipenv run python -X faulthandler -c 'import onnxruntime'
+pipenv run python -X faulthandler -c 'import ai_edge_litert'
 ```
+
+After changing runtime packages, refresh the Docker dependency list with
+`pipenv lock && pipenv requirements | rg -v '^onnxruntime==' > requirements-runtime.txt`.
+The ONNX Runtime wheel is supplied separately by the Docker build argument.
 
 Include the output and `lscpu` details in a bug report. The Pydantic schema warning
 was fixed in the project models; it was separate from that process crash.
 
 ## Docker (e.g. Unraid / lightNVR)
+
+The default model is an NMS-free YOLO26 nano ONNX export. To compare a larger
+YOLO26s model, export it with `nms=False`; the YOLO26 decoder expects
+`(1, 300, 6)` detections, while a default raw export needs a different decoder.
+The included `yolo26s.onnx` was exported from Ultralytics `yolo26s.pt` with
+Ultralytics 8.4.211; its SHA-256 is
+`f4c01521140858fe71fccee8b878d984a2332433e4374cbf3ce8f0b93d3f21fa`.
+
+```bash
+pipenv sync --dev
+pipenv run python scripts/download_models.py --family yolo26 --model-size s
+pipenv run python scripts/benchmark_onnx_models.py --images /path/to/camera-frames \
+  --model nano=backends/onnx/models/yolo26n-distill.onnx:yolo26 \
+  --model small=backends/onnx/models/yolo26s.onnx:yolo26 \
+  --model yolo11=backends/onnx/models/yolo11n.onnx:yolo11
+```
+
+The script reports end-to-end latency and detection counts. Choose a production
+model using labeled camera frames and measured recall, false alarms, and latency;
+counts alone cannot establish accuracy. For distant objects, YOLO26's P2 variant
+requires training from its YAML architecture on your camera dataset:
+
+```bash
+pipenv run yolo detect train model=yolo26n-p2.yaml data=/path/to/camera-data.yaml imgsz=960 epochs=100
+```
+
+YOLOE-26 supports promptable classes. Try it as a separate experiment with
+`pipenv run python scripts/try_yoloe.py frame.jpg --classes person,package`.
+Its segmentation output needs a separate decoder
+and is not selectable through the current ONNX backend. Python 3.15 is the newest
+stable Python release, but ONNX Runtime does not yet publish Python 3.15 wheels;
+3.14 is the newest version this image can run with the default backend.
 
 ### Build
 
@@ -93,10 +129,9 @@ was fixed in the project models; it was separate from that process crash.
 docker build -t light-object-detect:local .
 ```
 
-The image installs `tflite-runtime`, but does not bake in a model by default.
+The image installs `ai-edge-litert`, but does not bake in a TFLite model by default.
 To include the reference model, build with `--build-arg DOWNLOAD_DEFAULT_MODEL=1`.
-TensorFlow is optional (`--build-arg INSTALL_TENSORFLOW=1`) and is not needed
-for the default TFLite runtime. Set `DEFAULT_BACKEND=tflite` to select it by
+Set `DEFAULT_BACKEND=tflite` to select LiteRT by
 default, or pass `?backend=tflite` for a single request.
 
 ### Run

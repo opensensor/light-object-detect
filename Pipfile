@@ -4,32 +4,32 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-sentry-sdk = "==2.73.0"
-fastapi = "*"
-uvicorn = "*"
-python-multipart = "*"
-pydantic = "*"
-pydantic-settings = "*"
-pillow = "*"
-exceptiongroup = "*"
-numpy = "*"
-tensorflow = "*"
+sentry-sdk = "==2.75.0"
+fastapi = "==0.162.5"
+uvicorn = "==0.54.0"
+python-multipart = "==0.0.33"
+pydantic = "==2.14.3"
+pydantic-settings = "==2.16.2"
+pillow = "==13.0.0"
+numpy = "==2.5.4"
 # Swap for onnxruntime-openvino (Intel CPU/iGPU/NPU) or onnxruntime-gpu (CUDA)
 # to enable those execution providers. They replace this wheel; do not install
-# more than one. See BACKEND_CONFIGURATION.md.
-onnxruntime = "==1.23.2"
-opencv-python = "*"
-scipy = "*"
-shapely = "*"
-transformers = ">=4.51.1,<5.0"
-torch = ">=2.7.0"
-accelerate = ">=1.10.0"
+# more than one. The OpenVINO wheel currently requires Python 3.13 or older.
+# See BACKEND_CONFIGURATION.md.
+onnxruntime = "==1.31.1"
+opencv-python = "==5.0.0.93"
+shapely = "==2.2.0"
+ai-edge-litert = "==2.3.0"
 
 [dev-packages]
-ultralytics = "*"
-# Optional: the suites in tests/ are stdlib-only and self-run under plain
-# `python3 tests/test_*.py`, so pytest is a convenience, not a requirement.
+ultralytics = "==8.4.211"
+transformers = ">=4.51.1,<5.0"
+accelerate = ">=1.10.0,<2.0"
+onnx = "*"
+onnxslim = "*"
+# The unit suites use unittest; pytest is a convenience for local runs.
 pytest = "*"
+httpx2 = "*"
 
 [requires]
-python_version = "3.13"
+python_version = "3.14"

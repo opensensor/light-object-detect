@@ -5,7 +5,7 @@ This guide explains how to configure different detection backends for both light
 ## Overview
 
 The light-object-detect API supports three detection backends:
-- **ONNX Runtime**: Best performance with CUDA, excellent accuracy with YOLOv8
+- **ONNX Runtime**: Default YOLO26 backend, with CPU, CUDA, and OpenVINO provider options
 - **TFLite**: Lightweight, good for embedded systems, moderate accuracy
 - **OpenCV DNN**: Good balance, supports many formats, decent performance
 
@@ -32,23 +32,20 @@ This will download the model to `backends/tflite/models/` and create the labels 
 
 ### ONNX Models
 
-Download YOLOv8 ONNX models:
+Download YOLO26 ONNX models:
 
 ```bash
-# Using the download script (requires wget)
-bash scripts/download_models.sh --model-size n --output-dir models
-
-# Or using Python (requires ultralytics package)
-pip install ultralytics
-python3 scripts/download_models.py --model-size n --output-dir models
+# Using the model authoring environment
+pipenv sync --dev
+pipenv run python scripts/download_models.py --family yolo26 --model-size n
 ```
 
 Available model sizes:
-- `n` (nano): ~6MB, fastest
-- `s` (small): ~22MB, balanced
-- `m` (medium): ~52MB, better accuracy
-- `l` (large): ~87MB, high accuracy
-- `x` (xlarge): ~136MB, best accuracy
+- `n` (nano): fastest
+- `s` (small): balanced
+- `m` (medium): better accuracy
+- `l` (large): high accuracy
+- `x` (xlarge): highest accuracy and cost
 
 ### OpenCV DNN Models
 
@@ -83,11 +80,11 @@ TFLITE_CONFIDENCE_THRESHOLD=0.5
 **For ONNX:**
 ```bash
 DEFAULT_BACKEND=onnx
-ONNX_MODEL_PATH=models/yolov8n.onnx
-ONNX_LABELS_PATH=models/coco_labels.txt
+ONNX_MODEL_PATH=backends/onnx/models/yolo26n-distill.onnx
+ONNX_LABELS_PATH=backends/onnx/models/coco.txt
 ONNX_CONFIDENCE_THRESHOLD=0.5
 ONNX_IOU_THRESHOLD=0.45
-ONNX_MODEL_TYPE=yolov8
+ONNX_MODEL_TYPE=yolo26
 ```
 
 **For OpenCV:**
@@ -220,7 +217,7 @@ cd light-object-detect
 bash scripts/download_models.sh --model-size n --output-dir models
 
 # Verify the file exists
-ls -lh models/yolov8n.onnx
+ls -lh backends/onnx/models/yolo26n-distill.onnx
 ```
 
 ### lightNVR Not Calling API
@@ -324,18 +321,22 @@ needs the `intel-opencl-icd` OpenCL driver *inside the image* and `--device
 `intel-driver-compiler-npu` / `intel-level-zero-npu` packages and
 `--device /dev/accel`.
 
-In Docker, build with both args:
+`onnxruntime-openvino` 1.24.1 currently has no Python 3.14 wheel. Use the
+Python 3.13 Bookworm variant for Intel GPU builds until a compatible wheel is
+published. The normal ONNX CPU/CUDA image uses Python 3.14.
+
+In Docker, build with these args:
 
 ```bash
 docker build \
-  --build-arg ONNXRUNTIME_PACKAGE=onnxruntime-openvino \
+  --build-arg BASE_IMAGE=python:3.13.18-slim-bookworm \
+  --build-arg ONNXRUNTIME_PACKAGE=onnxruntime-openvino==1.24.1 \
   --build-arg INSTALL_INTEL_GPU=1 .
 ```
 
 `INSTALL_INTEL_GPU=1` requires a Debian bookworm base — trixie dropped
-`intel-opencl-icd` from its repositories. The Dockerfile pins
-`BASE_IMAGE=python:3.11-slim-bookworm` for exactly this reason; if you override
-`BASE_IMAGE` with a trixie variant, the GPU driver install will fail with a
+`intel-opencl-icd` from its repositories. If you use a trixie variant, the
+GPU driver install will fail with a
 message telling you so. Without the driver the container still runs, but
 OpenVINO sees no GPU and silently uses the CPU device.
 

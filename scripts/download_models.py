@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to download and export YOLOv8 models to ONNX format.
+Download and export supported YOLO detection models to ONNX.
 """
 
 import os
@@ -8,9 +8,9 @@ import sys
 import argparse
 from pathlib import Path
 
-def download_yolov8_onnx(model_size='n', output_dir='backends/onnx/models'):
+def download_yolo_onnx(model_size='n', output_dir='backends/onnx/models', family='yolo26'):
     """
-    Download YOLOv8 model and export to ONNX format.
+    Download a YOLO model and export it for this service's decoder.
 
     Args:
         model_size: Model size (n, s, m, l, x)
@@ -27,14 +27,17 @@ def download_yolov8_onnx(model_size='n', output_dir='backends/onnx/models'):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    model_name = f'yolov8{model_size}.pt'
-    onnx_name = f'yolov8{model_size}.onnx'
+    model_name = f'{family}{model_size}.pt'
+    onnx_name = f'{family}{model_size}.onnx'
     
-    print(f"Downloading YOLOv8{model_size} model...")
+    print(f"Downloading {model_name} model...")
     model = YOLO(model_name)
 
-    print(f"Exporting to ONNX format (opset 21 for compatibility)...")
-    onnx_path = model.export(format='onnx', simplify=True, opset=21)
+    print("Exporting to ONNX format...")
+    options = {'format': 'onnx', 'simplify': True}
+    if family == 'yolo26':
+        options['nms'] = False
+    onnx_path = model.export(**options)
     
     # Move to output directory
     final_path = output_path / onnx_name
@@ -78,12 +81,14 @@ def create_coco_labels(output_dir='backends/onnx/models'):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Download YOLOv8 models and create label files')
+    parser = argparse.ArgumentParser(description='Download YOLO models and create label files')
+    parser.add_argument('--family', choices=['yolo26', 'yolo11', 'yolov8'],
+                        default='yolo26', help='Model family')
     parser.add_argument(
         '--model-size',
         choices=['n', 's', 'm', 'l', 'x'],
         default='n',
-        help='YOLOv8 model size (n=nano, s=small, m=medium, l=large, x=xlarge)'
+        help='Model size (n=nano, s=small, m=medium, l=large, x=xlarge)'
     )
     parser.add_argument(
         '--output-dir',
@@ -99,7 +104,7 @@ def main():
     args = parser.parse_args()
     
     print("=" * 60)
-    print("YOLOv8 Model Download and Export Tool")
+    print("YOLO Model Download and Export Tool")
     print("=" * 60)
     
     # Create labels file
@@ -107,7 +112,7 @@ def main():
     
     if not args.labels_only:
         # Download and export model
-        model_file = download_yolov8_onnx(args.model_size, args.output_dir)
+        model_file = download_yolo_onnx(args.model_size, args.output_dir, args.family)
         
         print("\n" + "=" * 60)
         print("Setup Complete!")
@@ -118,7 +123,7 @@ def main():
         print(f"DEFAULT_BACKEND=onnx")
         print(f"ONNX_MODEL_PATH={model_file}")
         print(f"ONNX_LABELS_PATH={labels_file}")
-        print(f"ONNX_MODEL_TYPE=yolov8")
+        print(f"ONNX_MODEL_TYPE={args.family}")
     else:
         print("\n" + "=" * 60)
         print("Labels file created!")
