@@ -15,5 +15,9 @@ venv
 .coverage
 dist
 build
+/*.pt
+/yolo11n.onnx
+/yolo26n.onnx
+/mobileclip*.ts
 *.log
 terminals

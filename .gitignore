@@ -36,6 +36,7 @@ backends/tflite/models/
 
 # PyTorch weights (used only for export, not deployed)
 *.pt
+/mobileclip*.ts
 
 # Logs
 *.log

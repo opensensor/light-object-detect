@@ -99,6 +99,12 @@ class ONNXBackend(DetectionBackend):
         # Get model input/output details
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [output.name for output in self.session.get_outputs()]
+        output_shape = self.session.get_outputs()[0].shape
+        if self.model_type == "yolo26" and (len(output_shape) != 3 or output_shape[-1] != 6):
+            raise ValueError(
+                f"YOLO26 model output {output_shape} is incompatible with the NMS-free "
+                "decoder. Export with nms=False, or select the raw-output decoder."
+            )
         
         # Get input shape
         input_shape = self.session.get_inputs()[0].shape
@@ -189,9 +195,16 @@ class ONNXBackend(DetectionBackend):
         Returns:
             An ONNX Runtime InferenceSession
         """
+        options = ort.SessionOptions()
+        if thread_count := os.environ.get("ONNX_INTRA_OP_THREADS"):
+            options.intra_op_num_threads = int(thread_count)
+            options.inter_op_num_threads = 1
+            options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            options.add_session_config_entry("session.inter_op.allow_spinning", "0")
         try:
             return ort.InferenceSession(
-                model_path, providers=providers, provider_options=provider_options
+                model_path, sess_options=options,
+                providers=providers, provider_options=provider_options
             )
         except Exception as exc:
             if providers == [CPU_PROVIDER]:
@@ -201,7 +214,8 @@ class ONNXBackend(DetectionBackend):
                 "falling back to %s", providers, exc, CPU_PROVIDER
             )
             return ort.InferenceSession(
-                model_path, providers=[CPU_PROVIDER], provider_options=[{}]
+                model_path, sess_options=options,
+                providers=[CPU_PROVIDER], provider_options=[{}]
             )
 
     def _load_labels(self, labels_path: str) -> List[str]:
@@ -381,7 +395,7 @@ class ONNXBackend(DetectionBackend):
 
         YOLO26 output shape: (1, 300, 6) = (batch, max_detections, [x1, y1, x2, y2, conf, class_id])
         Coordinates are in input-image pixel space (640×640 with letterbox padding).
-        NMS is already applied inside the model — no manual NMS needed.
+        The one-to-one head is NMS-free — no manual NMS is needed.
 
         Args:
             outputs: Model outputs
